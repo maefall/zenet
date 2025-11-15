@@ -1,6 +1,6 @@
 use super::{
-    auth_payload_codec, certificate::load_or_generate_dev_certs, frame_codec, CLIENT_IDENTIFIER,
-    KEY, SERVER_ADDRESS,
+    certificate::load_or_generate_dev_certs, frame_codec, CLIENT_IDENTIFIER,
+    KEY, SERVER_ADDRESS, auth_payload_codec,
 };
 use futures::TryStreamExt;
 use quinn::{ClientConfig, Endpoint};
@@ -10,12 +10,12 @@ use tokio::io::AsyncWriteExt;
 use tokio::time::{sleep, Duration};
 use tokio_util::{
     bytes::BytesMut,
-    codec::{Decoder, Encoder, FramedRead},
+    codec::{Encoder, FramedRead},
 };
 use tracing::info;
 use zenet::{
-    zauth::AuthPayload,
-    zwire::{Frame, MessageType},
+    zauth::{AuthPayload},
+    zwire::{EncodeIntoFrame, MessageType},
 };
 
 const CLIENT_ADDRESS: &str = "127.0.0.1:0";
@@ -46,17 +46,10 @@ async fn run_client(
     let (mut send, recv) = connection.open_bi().await?;
 
     tokio::spawn(async move {
-        let mut codec_buffer = BytesMut::new();
-
         let mut framed_reader = FramedRead::new(recv, frame_codec());
 
         while let Ok(Some(frame)) = framed_reader.try_next().await {
-            codec_buffer.clear();
-            codec_buffer.extend_from_slice(&frame.payload);
-
-            let payload = auth_payload_codec().decode(&mut codec_buffer).unwrap();
-
-            info!("Echoes: Frame: {:?} and Payload: {:?}", frame, payload);
+            info!("{:?}", frame.message_type);
         }
     });
 
@@ -64,15 +57,7 @@ async fn run_client(
 
     loop {
         let auth_payload = AuthPayload::new(CLIENT_IDENTIFIER.into(), KEY).unwrap();
-
-        auth_payload_codec()
-            .encode(auth_payload, &mut codec_buffer)
-            .unwrap();
-
-        let frame = Frame {
-            message_type: MessageType::Auth,
-            payload: codec_buffer.split().freeze(),
-        };
+        let frame = auth_payload_codec().encode_into_frame(auth_payload, MessageType::Auth, &mut codec_buffer)?;
 
         frame_codec().encode(frame, &mut codec_buffer).unwrap();
 

@@ -52,7 +52,6 @@ impl super::AuthStore for InMemoryStore {
             Entry::Occupied(mut entry) => {
                 let (deque, set) = entry.get_mut();
 
-                // prune old nonces
                 while let Some((_front_nonce, front_ts)) = deque.front() {
                     if *front_ts < cutoff {
                         if let Some((rnonce, _)) = deque.pop_front() {
@@ -63,12 +62,10 @@ impl super::AuthStore for InMemoryStore {
                     }
                 }
 
-                // replay check
                 if set.contains(&nonce) {
                     return Ok(false);
                 }
 
-                // bounded queue
                 #[allow(clippy::collapsible_if)]
                 if deque.len() >= self.max_per_client {
                     if let Some((rnonce, _)) = deque.pop_front() {

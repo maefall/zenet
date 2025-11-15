@@ -8,10 +8,10 @@ use std::{error::Error, net::SocketAddr};
 use tokio::io::AsyncWriteExt;
 use tokio_util::{
     bytes::BytesMut,
-    codec::{Decoder, Encoder, FramedRead},
+    codec::{Encoder, FramedRead},
 };
 use tracing::info;
-use zenet::zwire::MessageType;
+use zenet::zwire::{DecodeFromFrame, MessageType};
 
 pub async fn run() -> Result<(), Box<dyn Error>> {
     let (_, cert_der, key_der) = load_or_generate_dev_certs()?;
@@ -29,11 +29,10 @@ async fn handle_stream(mut send: SendStream, receive: RecvStream) -> Result<(), 
     while let Some(Ok(frame)) = framed_reader.next().await {
         match frame.message_type {
             MessageType::Auth => {
-                codec_buffer.clear();
-                codec_buffer.extend_from_slice(&frame.payload);
-
-                if let Ok(Some(auth_payload)) = auth_payload_codec().decode(&mut codec_buffer) {
-                    tracing::info!("Received Auth request");
+                if let Some((auth_payload, message_type)) =
+                    auth_payload_codec().decode_from_frame(frame, &mut codec_buffer)?
+                {
+                    tracing::info!("Received auth request ({message_type:?})");
 
                     let response_frame = AUTHENTICATOR.process_auth_payload(&auth_payload);
 

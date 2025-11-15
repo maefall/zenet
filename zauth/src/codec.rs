@@ -6,7 +6,47 @@ use tokio_util::{
     bytes::{Buf, BufMut, BytesMut},
     codec::{Decoder, Encoder},
 };
-use zwire::errors::WireError;
+use zwire::{errors::WireError, DecodeFromFrame, EncodeIntoFrame, Frame, MessageType};
+
+impl EncodeIntoFrame for AuthPayloadCodec {
+    type Item = AuthPayload;
+
+    fn encode_into_frame(
+        &mut self,
+        payload: Self::Item,
+        message_type: MessageType,
+        codec_buffer: &mut BytesMut,
+    ) -> Result<Frame, WireError> {
+        let start_offset = codec_buffer.len();
+
+        self.encode(payload, codec_buffer)?;
+
+        let auth_payload_bytes = codec_buffer.split_off(start_offset);
+
+        Ok(Frame {
+            message_type,
+            payload: auth_payload_bytes.freeze(),
+        })
+    }
+}
+
+impl DecodeFromFrame for AuthPayloadCodec {
+    type Item = AuthPayload;
+
+    fn decode_from_frame(
+        &mut self,
+        frame: Frame,
+        codec_buffer: &mut BytesMut,
+    ) -> Result<Option<(Self::Item, MessageType)>, WireError> {
+        codec_buffer.extend_from_slice(&frame.payload);
+
+        if let Some(auth_payload) = self.decode(codec_buffer)? {
+            Ok(Some((auth_payload, frame.message_type)))
+        } else {
+            Ok(None)
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct AuthPayloadCodec {
