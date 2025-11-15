@@ -1,0 +1,21 @@
+[package]
+name = "zauth"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+zwire = { path = "../zwire" }
+tracing = { workspace = true }
+miette = { workspace = true }
+thiserror = { workspace = true }
+tokio-util = { workspace = true }
+hmac = "0.12.1"
+sha2 = "0.10.9"
+rand = "0.9.2"
+subtle = "2.6.1"
+secrecy = "0.10.3"
+dashmap = { version = "6.1.0", optional = true }
+
+[features]
+default = [ "in_memory" ]
+in_memory = [ "dep:dashmap" ]

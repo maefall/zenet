@@ -1,0 +1,10 @@
+[package]
+name = "zwire"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+tracing = { workspace = true }
+miette = { workspace = true }
+thiserror = { workspace = true }
+tokio-util = { workspace = true }
