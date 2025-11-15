@@ -4,11 +4,11 @@ mod server;
 mod tracing_setup;
 
 use client::run as run_client;
+use once_cell::sync::Lazy;
 use server::run as run_server;
 use std::error::Error;
 use tracing_setup::setup_tracing;
-use once_cell::sync::Lazy;
-use znet::{
+use zenet::{
     zauth::{AuthPayloadCodec, Authenticator, InMemoryStore},
     zwire::FrameCodec,
 };

@@ -11,7 +11,7 @@ use tokio_util::{
     codec::{Decoder, Encoder, FramedRead},
 };
 use tracing::info;
-use znet::zwire::MessageType;
+use zenet::zwire::MessageType;
 
 pub async fn run() -> Result<(), Box<dyn Error>> {
     let (_, cert_der, key_der) = load_or_generate_dev_certs()?;

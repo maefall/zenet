@@ -13,7 +13,7 @@ use tokio_util::{
     codec::{Decoder, Encoder, FramedRead},
 };
 use tracing::info;
-use znet::{
+use zenet::{
     zauth::AuthPayload,
     zwire::{Frame, MessageType},
 };
