@@ -51,7 +51,7 @@ impl<S: AuthStore> Authenticator<S> {
 
         let key_guard = self.store.get_key(&auth.client_identifier);
 
-        let key_bytes: &[u8] = match key_guard.as_ref() {
+        let key_bytes = match key_guard.as_ref() {
             Some(k) => k.expose_secret(),
             None => &DUMMY_KEY,
         };
@@ -75,7 +75,7 @@ impl<S: AuthStore> Authenticator<S> {
         if key_guard.is_some() {
             let is_nonce_new = match self.store.insert_nonce(
                 &auth.client_identifier,
-                auth.nonce,
+                auth.nonce.clone(),
                 auth.timestamp,
                 std::time::Duration::from_secs(self.skew_seconds),
             ) {

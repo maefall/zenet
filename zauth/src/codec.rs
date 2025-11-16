@@ -108,19 +108,12 @@ impl Decoder for AuthPayloadCodec {
         }
 
         let mut frame = source.split_to(total_length);
-
         frame.advance(CLIENT_ID_LENGTH_HEADER_LENGTH);
 
-        let id_bytes = frame.split_to(client_id_length);
-        let timestamp = u64::from_be_bytes(
-            frame
-                .split_to(TIMESTAMP_LENGTH)
-                .as_ref()
-                .try_into()
-                .unwrap(),
-        );
-        let nonce: [u8; NONCE_LENGTH] = frame.split_to(NONCE_LENGTH).as_ref().try_into().unwrap();
-        let mac: [u8; MAC_LENGTH] = frame.split_to(MAC_LENGTH).as_ref().try_into().unwrap();
+        let id_bytes = frame.split_to(client_id_length).freeze();
+        let timestamp = frame.get_u64();
+        let nonce = frame.split_to(NONCE_LENGTH).freeze();
+        let mac = frame.split_to(MAC_LENGTH).freeze();
 
         let client_identifier = std::str::from_utf8(&id_bytes)
             .map_err(|_| WireError::MalformedString("client_identifier"))?

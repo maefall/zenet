@@ -52,7 +52,7 @@ impl Encoder<Frame> for FrameCodec {
 
         destination.reserve(total_length);
 
-        destination.put_u8(frame.message_type as u8);
+        destination.put_u8(frame.message_type as u8); // repr
         destination.put_u16(payload_length as u16);
         destination.extend_from_slice(&frame.payload);
 
@@ -65,7 +65,9 @@ impl Decoder for FrameCodec {
     type Error = WireError;
 
     fn decode(&mut self, source: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if source.len() < HEADER_LENGTH {
+        let source_length = source.len();
+
+        if source_length < HEADER_LENGTH {
             return Ok(None);
         }
 
@@ -92,7 +94,7 @@ impl Decoder for FrameCodec {
                     self.max_payload_length,
                 ))?;
 
-        if source.len() < total_length {
+        if source_length < total_length {
             return Ok(None);
         }
 

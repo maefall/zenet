@@ -3,13 +3,14 @@ mod codec;
 mod storage;
 
 pub use authenticator::Authenticator;
-pub use storage::{memory::InMemoryStore, AuthStore, StorageError};
 pub use codec::AuthPayloadCodec;
+pub use storage::{memory::InMemoryStore, AuthStore, StorageError};
 
 use authenticator::auth_mac;
 use hmac::digest::InvalidLength;
 use rand::RngCore;
-use std::time::{SystemTime, UNIX_EPOCH, SystemTimeError};
+use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
+use tokio_util::bytes::{Bytes, BytesMut};
 
 const CLIENT_ID_LENGTH_FIELD_OFFSET: usize = 0;
 
@@ -36,18 +37,19 @@ pub enum ZauthError {
 pub struct AuthPayload {
     pub client_identifier: String,
     pub timestamp: u64,
-    pub nonce: [u8; NONCE_LENGTH],
-    pub mac: [u8; MAC_LENGTH],
+    pub nonce: Bytes,
+    pub mac: Bytes,
 }
 
 impl AuthPayload {
     pub fn new(client_identifier: String, key: &str) -> Result<Self, ZauthError> {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
-        let mut nonce = [0u8; 16];
+        let mut nonce_buffer = BytesMut::zeroed(16);
 
-        rand::rng().fill_bytes(&mut nonce);
+        rand::rng().fill_bytes(&mut nonce_buffer);
 
+        let nonce = nonce_buffer.freeze();
         let mac = auth_mac(key.as_bytes(), &client_identifier, timestamp, &nonce)?;
 
         Ok(AuthPayload {

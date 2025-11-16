@@ -1,13 +1,15 @@
-use crate::{ZauthError, MAC_LENGTH, NONCE_LENGTH};
-use hmac::{Hmac, Mac};
+use crate::ZauthError;
+use tokio_util::bytes::Bytes;
+
+use hmac::{digest::FixedOutput, Hmac, Mac};
 use sha2::Sha256;
 
 pub fn auth_mac(
     key: &[u8],
     client_identifier: &str,
     timestamp: u64,
-    nonce16: &[u8; NONCE_LENGTH],
-) -> Result<[u8; MAC_LENGTH], ZauthError> {
+    nonce: &Bytes,
+) -> Result<Bytes, ZauthError> {
     type HmacSha256 = Hmac<Sha256>;
 
     let mut mac = HmacSha256::new_from_slice(key)?;
@@ -17,13 +19,9 @@ pub fn auth_mac(
     mac.update(client_id_bytes);
 
     mac.update(&timestamp.to_be_bytes());
-    mac.update(nonce16);
+    mac.update(nonce);
 
-    let out = mac.finalize().into_bytes();
+    let tag_array = mac.finalize_fixed();
 
-    let mut tag = [0u8; MAC_LENGTH];
-
-    tag.copy_from_slice(&out);
-
-    Ok(tag)
+    Ok(Bytes::copy_from_slice(&tag_array))
 }
