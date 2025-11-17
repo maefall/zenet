@@ -7,7 +7,7 @@ pub use codec::AuthPayloadCodec;
 pub use storage::{memory::InMemoryStore, AuthStore, StorageError};
 
 use authenticator::auth_mac;
-use bytestr::ByteStr;
+use zwire::codec::bytestring::ByteStr;
 use hmac::digest::InvalidLength;
 use rand::RngCore;
 use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};

@@ -1,5 +1,5 @@
 use super::super::errors::{MalformedStringError, MalformedStringKind};
-use bytestr::ByteStr;
+pub use bytestr::ByteStr;
 use tokio_util::bytes::Bytes;
 
 pub enum ByteStringFieldPolicy {

@@ -1832,7 +1832,6 @@ dependencies = [
 name = "zauth"
 version = "0.0.0"
 dependencies = [
- "bytestr",
  "dashmap",
  "hmac",
  "miette",

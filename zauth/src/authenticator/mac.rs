@@ -1,7 +1,7 @@
 use crate::ZauthError;
 use tokio_util::bytes::Bytes;
 
-use bytestr::ByteStr;
+use zwire::codec::bytestring::ByteStr;
 use hmac::{digest::FixedOutput, Hmac, Mac};
 use sha2::Sha256;
 

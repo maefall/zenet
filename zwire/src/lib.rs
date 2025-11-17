@@ -1,7 +1,7 @@
 pub mod codec;
 pub mod errors;
 
-pub use codec::FrameCodec;
+pub use codec::{FrameCodec, bytestring::ByteStr};
 use errors::WireError;
 use tokio_util::{
     bytes::{Bytes, BytesMut},
