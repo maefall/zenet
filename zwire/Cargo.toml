@@ -8,3 +8,4 @@ tracing = { workspace = true }
 miette = { workspace = true }
 thiserror = { workspace = true }
 tokio-util = { workspace = true }
+bytestr = "0.3.1"

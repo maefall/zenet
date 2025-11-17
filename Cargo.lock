@@ -1893,6 +1893,7 @@ checksum = "b97154e67e32c85465826e8bcc1c59429aaaf107c1e4a9e53c8d8ccd5eff88d0"
 name = "zwire"
 version = "0.0.0"
 dependencies = [
+ "bytestr",
  "miette",
  "thiserror 2.0.17",
  "tokio-util",

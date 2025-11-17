@@ -1,4 +1,4 @@
-mod codec;
+pub mod codec;
 pub mod errors;
 
 pub use codec::FrameCodec;
@@ -11,19 +11,19 @@ use tokio_util::{
 // [1:message_type 2:payload_length payload_length:payload]
 #[derive(Debug, Clone)]
 pub struct Frame {
-    pub message_type: MessageType,
+    pub message_type: Message,
     pub payload: Bytes,
 }
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
-pub enum MessageType {
+pub enum Message {
     Auth = 1,
     AuthValid = 2,
     AuthInvalid = 3,
 }
 
-impl TryFrom<u8> for MessageType {
+impl TryFrom<u8> for Message {
     type Error = WireError;
 
     fn try_from(code: u8) -> Result<Self, Self::Error> {
@@ -42,7 +42,7 @@ pub trait EncodeIntoFrame: Encoder<Self::EncodeItem> {
     fn encode_into_frame(
         &mut self,
         payload: Self::EncodeItem,
-        message_type: MessageType,
+        message_type: Message,
         codec_buffer: &mut BytesMut,
     ) -> Result<Frame, Self::Error> {
         let start_offset = codec_buffer.len();
@@ -63,7 +63,7 @@ pub trait DecodeFromFrame: Decoder {
         &mut self,
         frame: Frame,
         codec_buffer: &mut BytesMut,
-    ) -> Result<Option<(Self::Item, MessageType)>, Self::Error>
+    ) -> Result<Option<(Self::Item, Message)>, Self::Error>
     where
         Self: Sized,
     {

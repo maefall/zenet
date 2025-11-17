@@ -1,17 +1,18 @@
 use crate::ZauthError;
 use tokio_util::bytes::Bytes;
 
+use bytestr::ByteStr;
 use hmac::{digest::FixedOutput, Hmac, Mac};
 use sha2::Sha256;
 
+type HmacSha256 = Hmac<Sha256>;
+
 pub fn auth_mac(
     key: &[u8],
-    client_identifier: &str,
+    client_identifier: &ByteStr,
     timestamp: u64,
     nonce: &Bytes,
 ) -> Result<Bytes, ZauthError> {
-    type HmacSha256 = Hmac<Sha256>;
-
     let mut mac = HmacSha256::new_from_slice(key)?;
     let client_id_bytes = client_identifier.as_bytes();
 

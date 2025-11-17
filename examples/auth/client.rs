@@ -15,7 +15,7 @@ use tokio_util::{
 use tracing::info;
 use zenet::{
     zauth::{AuthPayload},
-    zwire::{EncodeIntoFrame, MessageType},
+    zwire::{EncodeIntoFrame, Message},
 };
 
 const CLIENT_ADDRESS: &str = "127.0.0.1:0";
@@ -57,7 +57,7 @@ async fn run_client(
 
     loop {
         let auth_payload = AuthPayload::new(CLIENT_IDENTIFIER.into(), KEY).unwrap();
-        let frame = auth_payload_codec().encode_into_frame(auth_payload, MessageType::Auth, &mut codec_buffer)?;
+        let frame = auth_payload_codec().encode_into_frame(auth_payload, Message::Auth, &mut codec_buffer)?;
 
         frame_codec().encode(frame, &mut codec_buffer).unwrap();
 

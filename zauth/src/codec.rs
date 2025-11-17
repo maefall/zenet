@@ -1,13 +1,16 @@
 use crate::{
-    AuthPayload, CLIENT_ID_LENGTH_FIELD_OFFSET, CLIENT_ID_LENGTH_HEADER_LENGTH, FIXED_PART_LENGTH,
-    MAC_LENGTH, MAX_CLIENT_IDENTIFIER_LENGTH, NONCE_LENGTH, TIMESTAMP_LENGTH,
+    AuthPayload, CLIENT_IDENTIFIER_LENGTH_FIELD_OFFSET, CLIENT_IDENTIFIER_LENGTH_HEADER_LENGTH,
+    FIXED_PART_LENGTH, MAC_LENGTH, MAX_CLIENT_IDENTIFIER_LENGTH, NONCE_LENGTH, TIMESTAMP_LENGTH,
 };
-use bytestr::ByteStr;
 use tokio_util::{
     bytes::{Buf, BufMut, BytesMut},
     codec::{Decoder, Encoder},
 };
-use zwire::{errors::WireError, DecodeFromFrame, EncodeIntoFrame};
+use zwire::{
+    codec::bytestring::{ByteStringFieldExt, ByteStringFieldPolicy},
+    errors::WireError,
+    DecodeFromFrame, EncodeIntoFrame,
+};
 
 impl EncodeIntoFrame for AuthPayloadCodec {
     type EncodeItem = AuthPayload;
@@ -64,7 +67,7 @@ impl Encoder<AuthPayload> for AuthPayloadCodec {
             ));
         }
 
-        destination.put_u16(client_id_length as u16);
+        destination.put_u8(client_id_length as u8);
         destination.extend_from_slice(client_id_bytes);
         destination.put_u64(auth_payload.timestamp);
         destination.extend_from_slice(&auth_payload.nonce);
@@ -81,16 +84,14 @@ impl Decoder for AuthPayloadCodec {
     fn decode(&mut self, source: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let source_length = source.len();
 
-        if source_length < CLIENT_ID_LENGTH_HEADER_LENGTH {
+        if source_length < CLIENT_IDENTIFIER_LENGTH_HEADER_LENGTH {
             return Ok(None);
         }
 
-        let client_id_length = u16::from_be_bytes([
-            source[CLIENT_ID_LENGTH_FIELD_OFFSET],
-            source[CLIENT_ID_LENGTH_FIELD_OFFSET + 1],
-        ]) as usize;
+        let client_id_length =
+            u8::from_be_bytes([source[CLIENT_IDENTIFIER_LENGTH_FIELD_OFFSET]]) as usize;
 
-        let total_length = CLIENT_ID_LENGTH_HEADER_LENGTH
+        let total_length = CLIENT_IDENTIFIER_LENGTH_HEADER_LENGTH
             + client_id_length
             + TIMESTAMP_LENGTH
             + NONCE_LENGTH
@@ -109,15 +110,18 @@ impl Decoder for AuthPayloadCodec {
         }
 
         let mut frame = source.split_to(total_length);
-        frame.advance(CLIENT_ID_LENGTH_HEADER_LENGTH);
+        frame.advance(CLIENT_IDENTIFIER_LENGTH_HEADER_LENGTH);
 
         let client_identifier_bytes = frame.split_to(client_id_length).freeze();
         let timestamp = frame.get_u64();
         let nonce = frame.split_to(NONCE_LENGTH).freeze();
         let mac = frame.split_to(MAC_LENGTH).freeze();
 
-        let client_identifier = ByteStr::from_utf8(client_identifier_bytes)
-            .map_err(|_| WireError::MalformedString("client_identifier"))?;
+        let client_identifier = client_identifier_bytes.to_bytestr_field(
+            "client_identifier",
+            Some(MAX_CLIENT_IDENTIFIER_LENGTH),
+            ByteStringFieldPolicy::AsciiHyphen,
+        )?;
 
         Ok(Some(AuthPayload {
             client_identifier,
