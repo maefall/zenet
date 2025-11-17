@@ -6,7 +6,7 @@ use secrecy::ExposeSecret;
 use std::time::{SystemTime, UNIX_EPOCH};
 use subtle::ConstantTimeEq;
 use tokio_util::bytes::Bytes;
-use zwire::{Frame, MessageType};
+use zwire::{Frame, Message};
 
 const DUMMY_KEY: [u8; 32] = [0u8; 32];
 
@@ -28,12 +28,12 @@ impl<S: AuthStore> Authenticator<S> {
 
         if auth_status {
             Frame {
-                message_type: MessageType::AuthValid,
+                message_type: Message::AuthValid,
                 payload: Bytes::new(),
             }
         } else {
             Frame {
-                message_type: MessageType::AuthInvalid,
+                message_type: Message::AuthInvalid,
                 payload: Bytes::new(),
             }
         }

@@ -11,7 +11,7 @@ use tokio_util::{
     codec::{Encoder, FramedRead},
 };
 use tracing::info;
-use zenet::zwire::{DecodeFromFrame, MessageType};
+use zenet::zwire::{DecodeFromFrame, Message};
 
 pub async fn run() -> Result<(), Box<dyn Error>> {
     let (_, cert_der, key_der) = load_or_generate_dev_certs()?;
@@ -28,7 +28,7 @@ async fn handle_stream(mut send: SendStream, receive: RecvStream) -> Result<(), 
 
     while let Some(Ok(frame)) = framed_reader.next().await {
         match frame.message_type {
-            MessageType::Auth => {
+            Message::Auth => {
                 if let Some((auth_payload, message_type)) =
                     auth_payload_codec().decode_from_frame(frame, &mut codec_buffer)?
                 {

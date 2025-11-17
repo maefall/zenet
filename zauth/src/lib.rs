@@ -7,18 +7,18 @@ pub use codec::AuthPayloadCodec;
 pub use storage::{memory::InMemoryStore, AuthStore, StorageError};
 
 use authenticator::auth_mac;
+use zwire::codec::bytestring::ByteStr;
 use hmac::digest::InvalidLength;
 use rand::RngCore;
 use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
 use tokio_util::bytes::{Bytes, BytesMut};
-use bytestr::ByteStr;
 
-const CLIENT_ID_LENGTH_FIELD_OFFSET: usize = 0;
+const CLIENT_IDENTIFIER_LENGTH_FIELD_OFFSET: usize = 0;
+const CLIENT_IDENTIFIER_LENGTH_HEADER_LENGTH: usize = 1;
 
 const FIXED_PART_LENGTH: usize =
-    CLIENT_ID_LENGTH_HEADER_LENGTH + TIMESTAMP_LENGTH + NONCE_LENGTH + MAC_LENGTH;
-const MAX_CLIENT_IDENTIFIER_LENGTH: usize = u16::MAX as usize;
-const CLIENT_ID_LENGTH_HEADER_LENGTH: usize = 2;
+    CLIENT_IDENTIFIER_LENGTH_HEADER_LENGTH + TIMESTAMP_LENGTH + NONCE_LENGTH + MAC_LENGTH;
+const MAX_CLIENT_IDENTIFIER_LENGTH: usize = u8::MAX as usize;
 const TIMESTAMP_LENGTH: usize = 8;
 const NONCE_LENGTH: usize = 16;
 const MAC_LENGTH: usize = 32;
