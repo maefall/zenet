@@ -127,6 +127,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 
 [[package]]
+name = "bytestr"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "410e22339ff9a7d87dd747b3769e67dbdd93863c7f2eeb704f8d726217fa5e7b"
+dependencies = [
+ "bytes",
+ "serde",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1822,6 +1832,7 @@ dependencies = [
 name = "zauth"
 version = "0.0.0"
 dependencies = [
+ "bytestr",
  "dashmap",
  "hmac",
  "miette",

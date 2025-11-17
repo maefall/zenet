@@ -11,6 +11,7 @@ use hmac::digest::InvalidLength;
 use rand::RngCore;
 use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
 use tokio_util::bytes::{Bytes, BytesMut};
+use bytestr::ByteStr;
 
 const CLIENT_ID_LENGTH_FIELD_OFFSET: usize = 0;
 
@@ -35,14 +36,14 @@ pub enum ZauthError {
 
 #[derive(Debug, Clone)]
 pub struct AuthPayload {
-    pub client_identifier: String,
+    pub client_identifier: ByteStr,
     pub timestamp: u64,
     pub nonce: Bytes,
     pub mac: Bytes,
 }
 
 impl AuthPayload {
-    pub fn new(client_identifier: String, key: &str) -> Result<Self, ZauthError> {
+    pub fn new(client_identifier: ByteStr, key: &str) -> Result<Self, ZauthError> {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         let mut nonce_buffer = BytesMut::zeroed(16);

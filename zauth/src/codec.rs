@@ -2,6 +2,7 @@ use crate::{
     AuthPayload, CLIENT_ID_LENGTH_FIELD_OFFSET, CLIENT_ID_LENGTH_HEADER_LENGTH, FIXED_PART_LENGTH,
     MAC_LENGTH, MAX_CLIENT_IDENTIFIER_LENGTH, NONCE_LENGTH, TIMESTAMP_LENGTH,
 };
+use bytestr::ByteStr;
 use tokio_util::{
     bytes::{Buf, BufMut, BytesMut},
     codec::{Decoder, Encoder},
@@ -110,14 +111,13 @@ impl Decoder for AuthPayloadCodec {
         let mut frame = source.split_to(total_length);
         frame.advance(CLIENT_ID_LENGTH_HEADER_LENGTH);
 
-        let id_bytes = frame.split_to(client_id_length).freeze();
+        let client_identifier_bytes = frame.split_to(client_id_length).freeze();
         let timestamp = frame.get_u64();
         let nonce = frame.split_to(NONCE_LENGTH).freeze();
         let mac = frame.split_to(MAC_LENGTH).freeze();
 
-        let client_identifier = std::str::from_utf8(&id_bytes)
-            .map_err(|_| WireError::MalformedString("client_identifier"))?
-            .to_string();
+        let client_identifier = ByteStr::from_utf8(client_identifier_bytes)
+            .map_err(|_| WireError::MalformedString("client_identifier"))?;
 
         Ok(Some(AuthPayload {
             client_identifier,
