@@ -14,6 +14,10 @@ pub enum WireError {
     #[diagnostic(severity(Error))]
     Underflow(&'static str, usize, usize),
 
+    #[error("arithmetic overflow, attempted to add {0} ({2}) to {1} ({3})")]
+    #[diagnostic(severity(Error))]
+    ArithmethicOverflow(usize, usize, &'static str, &'static str),
+
     #[error("invalid message type ({0})")]
     #[diagnostic(severity(Error))]
     InvalidMessageType(u8),

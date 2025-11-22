@@ -1,42 +1,61 @@
 use super::length_prefix::LengthPrefix;
+use std::marker::PhantomData;
 use tokio_util::bytes::BytesMut;
 
-pub struct PeekLength {
-    pub ready: bool,
-    pub length: usize,
+pub struct PeekLength<T: LengthPrefix> {
+    ready: bool,
+    length: usize,
+    _phantom: PhantomData<T>,
 }
 
-impl From<PeekLength> for usize {
-    fn from(peek_length: PeekLength) -> Self {
-        peek_length.length
-    }
-}
-
-impl PartialEq<usize> for PeekLength {
+impl<T: LengthPrefix> PeekLength<T> {
     #[inline]
-    fn eq(&self, other: &usize) -> bool {
-        self.ready && self.length == *other
+    pub fn is_ready(&self) -> bool {
+        self.ready
     }
-}
 
-impl PartialOrd<usize> for PeekLength {
     #[inline]
-    fn partial_cmp(&self, other: &usize) -> Option<std::cmp::Ordering> {
-        if !self.ready {
-            return Some(std::cmp::Ordering::Less);
+    pub fn get(&self) -> Option<usize> {
+        self.ready.then_some(self.length)
+    }
+
+    #[inline]
+    pub fn get_total(&self) -> Option<usize> {
+        let header_length = T::WIDTH;
+
+        self.checked_add(header_length)
+    }
+
+    #[inline]
+    pub fn get_total_seperated(&self) -> Option<(usize, usize)> {
+        if let Some(length) = self.get() {
+            let header_length = T::WIDTH;
+
+            return Some((length, header_length));
         }
 
-        self.length.partial_cmp(other)
+        None
+    }
+
+    #[inline]
+    pub fn saturating_add(&self, right_side: usize) -> Option<usize> {
+        self.get()
+            .map(|left_side| left_side.saturating_add(right_side))
+    }
+
+    #[inline]
+    pub fn checked_add(&self, right_side: usize) -> Option<usize> {
+        self.get()?.checked_add(right_side)
     }
 }
 
 pub trait BytesPeekExt {
-    fn peek_at<T: LengthPrefix>(&self, offset: usize) -> PeekLength;
+    fn peek_at<T: LengthPrefix>(&self, offset: usize) -> PeekLength<T>;
 }
 
 impl BytesPeekExt for BytesMut {
     #[inline]
-    fn peek_at<T: LengthPrefix>(&self, start_offset: usize) -> PeekLength {
+    fn peek_at<T: LengthPrefix>(&self, start_offset: usize) -> PeekLength<T> {
         const DEFAULT_LENGTH: usize = 0;
 
         let width = T::WIDTH;
@@ -46,6 +65,7 @@ impl BytesPeekExt for BytesMut {
             return PeekLength {
                 ready: false,
                 length: DEFAULT_LENGTH,
+                _phantom: PhantomData,
             };
         }
 
@@ -55,10 +75,12 @@ impl BytesPeekExt for BytesMut {
             Some(length) => PeekLength {
                 ready: true,
                 length,
+                _phantom: PhantomData,
             },
             None => PeekLength {
                 ready: false,
                 length: DEFAULT_LENGTH,
+                _phantom: PhantomData,
             },
         }
     }

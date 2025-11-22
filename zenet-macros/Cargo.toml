@@ -1,0 +1,12 @@
+[package]
+name = "zenet-macros"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+proc-macro2 = "1.0.103"
+syn = { version = "2.0.110", features = ["full"] }
+quote = "1.0.42"
+
+[lib]
+proc-macro = true

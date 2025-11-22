@@ -49,11 +49,11 @@ pub trait EncodeIntoFrame: Encoder<Self::EncodeItem> {
 
         self.encode(payload, codec_buffer)?;
 
-        let auth_payload_bytes = codec_buffer.split_off(start_offset);
+        let payload_bytes = codec_buffer.split_off(start_offset);
 
         Ok(Frame {
             message_type,
-            payload: auth_payload_bytes.freeze(),
+            payload: payload_bytes.freeze(),
         })
     }
 }
@@ -69,8 +69,8 @@ pub trait DecodeFromFrame: Decoder {
     {
         codec_buffer.extend_from_slice(&frame.payload);
 
-        if let Some(auth_payload) = self.decode(codec_buffer)? {
-            Ok(Some((auth_payload, frame.message_type)))
+        if let Some(payload) = self.decode(codec_buffer)? {
+            Ok(Some((payload, frame.message_type)))
         } else {
             Ok(None)
         }
