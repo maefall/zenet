@@ -13,16 +13,6 @@ use rand::RngCore;
 use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
 use tokio_util::bytes::{Bytes, BytesMut};
 
-const CLIENT_IDENTIFIER_LENGTH_FIELD_OFFSET: usize = 0;
-const CLIENT_IDENTIFIER_LENGTH_HEADER_LENGTH: usize = 1;
-
-const FIXED_PART_LENGTH: usize =
-    CLIENT_IDENTIFIER_LENGTH_HEADER_LENGTH + TIMESTAMP_LENGTH + NONCE_LENGTH + MAC_LENGTH;
-const MAX_CLIENT_IDENTIFIER_LENGTH: usize = u8::MAX as usize;
-const TIMESTAMP_LENGTH: usize = 8;
-const NONCE_LENGTH: usize = 16;
-const MAC_LENGTH: usize = 32;
-
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
 pub enum ZauthError {
     #[error("Invalid key length, {0:?}")]

@@ -1,13 +1,11 @@
-use crate::{
-    AuthPayload, CLIENT_IDENTIFIER_LENGTH_FIELD_OFFSET, CLIENT_IDENTIFIER_LENGTH_HEADER_LENGTH,
-    FIXED_PART_LENGTH, MAC_LENGTH, MAX_CLIENT_IDENTIFIER_LENGTH, NONCE_LENGTH, TIMESTAMP_LENGTH,
-};
+use crate::AuthPayload;
 use tokio_util::{
-    bytes::{Buf, BufMut, BytesMut},
+    bytes::{Buf, BytesMut},
     codec::{Decoder, Encoder},
 };
 use zwire::{
     codec::bytestring::{ByteStringFieldExt, ByteStringFieldPolicy},
+    codec::{define_fields, BytesMutPutExt, BytesPeekExt, LengthPrefix},
     errors::WireError,
     DecodeFromFrame, EncodeIntoFrame,
 };
@@ -26,9 +24,18 @@ pub struct AuthPayloadCodec {
 impl Default for AuthPayloadCodec {
     fn default() -> Self {
         Self {
-            max_length: usize::MAX,
+            max_length: HEADER_LENGTH + MAX_CLIENT_IDENTIFIER_LENGTH +  NONCE_LENGTH + MAC_LENGTH,
         }
     }
+}
+
+const MAX_CLIENT_IDENTIFIER_LENGTH: usize = 255;
+const NONCE_LENGTH: usize = 16;
+const MAC_LENGTH: usize = 32;
+
+define_fields! {
+    (Timestamp, u64, 0),
+    (ClientIdentifier, u8, 8),
 }
 
 impl Encoder<AuthPayload> for AuthPayloadCodec {
@@ -50,14 +57,13 @@ impl Encoder<AuthPayload> for AuthPayloadCodec {
             ));
         }
 
-        let total_length =
-            FIXED_PART_LENGTH
-                .checked_add(client_id_length)
-                .ok_or(WireError::Oversized(
-                    "total_length",
-                    client_id_length,
-                    self.max_length,
-                ))?;
+        let total_length = (HEADER_LENGTH + NONCE_LENGTH + MAC_LENGTH)
+            .checked_add(client_id_length)
+            .ok_or(WireError::Oversized(
+                "total_length",
+                client_id_length,
+                self.max_length,
+            ))?;
 
         if total_length > self.max_length {
             return Err(WireError::Oversized(
@@ -67,11 +73,15 @@ impl Encoder<AuthPayload> for AuthPayloadCodec {
             ));
         }
 
-        destination.put_u8(client_id_length as u8);
-        destination.extend_from_slice(client_id_bytes);
-        destination.put_u64(auth_payload.timestamp);
-        destination.extend_from_slice(&auth_payload.nonce);
-        destination.extend_from_slice(&auth_payload.mac);
+        destination.put_single::<TimestampLengthPrefix>(auth_payload.timestamp);
+        destination.put_length_prefixed::<ClientIdentifierLengthPrefix>(
+            client_id_bytes,
+            "client_identifier",
+            None,
+        )?;
+
+        destination.append_bytes(&auth_payload.nonce, NONCE_LENGTH, "nonce", None)?;
+        destination.append_bytes(&auth_payload.mac, MAC_LENGTH, "mac", None)?;
 
         Ok(())
     }
@@ -84,18 +94,16 @@ impl Decoder for AuthPayloadCodec {
     fn decode(&mut self, source: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let source_length = source.len();
 
-        if source_length < CLIENT_IDENTIFIER_LENGTH_HEADER_LENGTH {
+        if source_length < ClientIdentifierLengthPrefix::WIDTH {
             return Ok(None);
         }
 
-        let client_id_length =
-            u8::from_be_bytes([source[CLIENT_IDENTIFIER_LENGTH_FIELD_OFFSET]]) as usize;
+        let Some(client_id_length) = source.peek_at::<u8>(CLIENTIDENTIFIER_FIELD_OFFSET).get()
+        else {
+            return Ok(None);
+        };
 
-        let total_length = CLIENT_IDENTIFIER_LENGTH_HEADER_LENGTH
-            + client_id_length
-            + TIMESTAMP_LENGTH
-            + NONCE_LENGTH
-            + MAC_LENGTH;
+        let total_length = HEADER_LENGTH + client_id_length + NONCE_LENGTH + MAC_LENGTH;
 
         if total_length > self.max_length {
             return Err(WireError::Oversized(
@@ -110,10 +118,10 @@ impl Decoder for AuthPayloadCodec {
         }
 
         let mut frame = source.split_to(total_length);
-        frame.advance(CLIENT_IDENTIFIER_LENGTH_HEADER_LENGTH);
+        frame.advance(ClientIdentifierLengthPrefix::WIDTH);
 
-        let client_identifier_bytes = frame.split_to(client_id_length).freeze();
         let timestamp = frame.get_u64();
+        let client_identifier_bytes = frame.split_to(client_id_length).freeze();
         let nonce = frame.split_to(NONCE_LENGTH).freeze();
         let mac = frame.split_to(MAC_LENGTH).freeze();
 

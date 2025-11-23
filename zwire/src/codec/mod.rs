@@ -6,32 +6,43 @@ pub use peek::BytesPeekExt;
 mod take;
 pub use take::BytesMutTakeExt;
 
+mod put;
+pub use put::BytesMutPutExt;
+
 mod length_prefix;
+pub use length_prefix::LengthPrefix;
+
+mod checked_add;
+pub use checked_add::CheckedAddWire;
+
+pub use zenet_macros::define_fields;
 
 use crate::{errors::WireError, Frame, Message};
 use tokio_util::{
-    bytes::{Buf, BufMut, BytesMut},
+    bytes::{Buf, BytesMut},
     codec::{Decoder, Encoder},
 };
 
-const MESSAGE_TYPE_FIELD_LENGTH: usize = 1;
-const PAYLOAD_LENGTH_FIELD_LENGTH: usize = 2;
-const HEADER_LENGTH: usize = MESSAGE_TYPE_FIELD_LENGTH + PAYLOAD_LENGTH_FIELD_LENGTH;
-const PAYLOAD_LENGTH_OFFSET: usize = 1;
+define_fields! {
+  (Message, u8, 0),
+  (Payload, u16, 1),
+}
 
 #[derive(Clone, Copy)]
 pub struct FrameCodec {
-    max_payload_length: usize,
     max_length: usize,
+    max_payload_length: usize,
 }
 
 impl Default for FrameCodec {
     fn default() -> Self {
+        const DEFAULT_MAX_PAYLOAD_LENGTH: usize = 1300;
+
         let max_payload_length = usize::MAX;
 
         FrameCodec {
+            max_length: DEFAULT_MAX_PAYLOAD_LENGTH - HEADER_LENGTH,
             max_payload_length,
-            max_length: max_payload_length.saturating_add(HEADER_LENGTH),
         }
     }
 }
@@ -50,7 +61,7 @@ impl Encoder<Frame> for FrameCodec {
             ));
         }
 
-        if self.max_length > self.max_payload_length {
+        if payload_length > self.max_payload_length {
             return Err(WireError::Oversized(
                 "payload_length",
                 payload_length,
@@ -67,11 +78,22 @@ impl Encoder<Frame> for FrameCodec {
                     self.max_length,
                 ))?;
 
+        if total_length > self.max_length {
+            return Err(WireError::Oversized(
+                "total_length",
+                total_length,
+                self.max_length,
+            ));
+        }
+
         destination.reserve(total_length);
 
-        destination.put_u8(frame.message_type as u8); // repr
-        destination.put_u16(payload_length as u16);
-        destination.extend_from_slice(&frame.payload);
+        destination.put_single::<MessageLengthPrefix>(frame.message_type as MessageLengthPrefix); // repr
+        destination.put_length_prefixed::<PayloadLengthPrefix>(
+            &frame.payload,
+            "payload_length",
+            Some(PAYLOAD_FIELD_OFFSET),
+        )?;
 
         Ok(())
     }
@@ -86,17 +108,23 @@ impl Decoder for FrameCodec {
             return Ok(None);
         }
 
-        let payload_length_peek = source.peek_at::<u16>(PAYLOAD_LENGTH_OFFSET);
-        let payload_length = payload_length_peek.length;
+        let Some(payload_length) = source
+            .peek_at::<PayloadLengthPrefix>(PAYLOAD_FIELD_OFFSET)
+            .get()
+        else {
+            return Ok(None);
+        };
+
+        if payload_length > self.max_payload_length {
+            return Err(WireError::Oversized(
+                "payload_length",
+                payload_length,
+                self.max_payload_length,
+            ));
+        }
 
         let total_length =
-            HEADER_LENGTH
-                .checked_add(payload_length)
-                .ok_or(WireError::Oversized(
-                    "total_length",
-                    payload_length,
-                    self.max_payload_length,
-                ))?;
+            HEADER_LENGTH.checked_add_wire(payload_length, "header_length", "payload_length")?;
 
         if source.len() < total_length {
             return Ok(None);
@@ -104,16 +132,14 @@ impl Decoder for FrameCodec {
 
         let message_type = Message::try_from(source.get_u8())?;
 
-        if let Some(payload) =
-            source.take_length_prefixed_payload::<u16>(self.max_payload_length, "payload")?
+        if let Some(payload) = source
+            .take_length_prefixed::<PayloadLengthPrefix>(self.max_length, "payload")?
         {
             Ok(Some(Frame {
                 message_type,
                 payload,
             }))
         } else {
-            println!("Payload not present after complete frame");
-
             Ok(None)
         }
     }
