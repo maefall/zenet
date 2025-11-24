@@ -88,11 +88,7 @@ impl Encoder<Frame> for FrameCodec {
         destination.reserve(total_length);
 
         destination.put_single::<fields::message::Wired>(frame.message.into()); // repr
-        destination.put_length_prefixed::<fields::payload::Wired>(
-            &frame.payload,
-            "payload_length",
-            None,
-        )?;
+        destination.put_length_prefixed::<fields::payload::Wired>(&frame.payload)?;
 
         Ok(())
     }

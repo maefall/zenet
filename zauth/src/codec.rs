@@ -74,12 +74,7 @@ impl Encoder<AuthPayload> for AuthPayloadCodec {
         destination.put_single::<fields::timestamp::Wired>(auth_payload.timestamp);
         destination.put_single::<fields::nonce::Wired>(auth_payload.nonce);
         destination.put_fixed_bytes::<fields::mac::Wired>(&auth_payload.mac)?;
-
-        destination.put_length_prefixed::<fields::clientidentifier::Wired>(
-            client_id_bytes,
-            "client_identifier",
-            None,
-        )?;
+        destination.put_length_prefixed::<fields::clientidentifier::Wired>(client_id_bytes)?;
 
         Ok(())
     }

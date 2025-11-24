@@ -10,8 +10,6 @@ pub trait BytesMutPutExt {
     fn put_length_prefixed<I: WiredLengthPrefixed>(
         &mut self,
         payload: &Bytes,
-        payload_field_name: &'static str,
-        offset: Option<usize>,
     ) -> Result<(), WireError>;
     fn append_bytes(
         &mut self,
@@ -73,42 +71,20 @@ impl BytesMutPutExt for BytesMut {
     fn put_length_prefixed<I: WiredLengthPrefixed>(
         &mut self,
         payload: &Bytes,
-        payload_field_name: &'static str,
-        offset: Option<usize>,
     ) -> Result<(), WireError> {
         let payload_length = payload.len();
 
         if payload_length > I::Int::MAX {
             return Err(WireError::Oversized(
-                payload_field_name,
+                I::FIELD_NAME,
                 payload_length,
                 I::Int::MAX,
             ));
         }
 
         let payload_length_bytes = I::Int::to_bytes_from_usize(payload_length);
-        let payload_length_bytes_slice = payload_length_bytes.as_ref();
 
-        if let Some(offset) = offset {
-            let header_length =
-                offset.checked_add_wire("OFFSET", I::Int::SIZE, "LENGTH_PREFIX_SIZE")?;
-            let total_length = header_length.checked_add_wire(
-                "OFFSET + LENGTH_PREFIX_SIZE",
-                payload_length,
-                "payload_length",
-            )?;
-
-            if self.len() < total_length {
-                self.resize(total_length, 0);
-            }
-
-            self[offset..header_length].copy_from_slice(payload_length_bytes_slice);
-            self[header_length..total_length].copy_from_slice(payload);
-
-            return Ok(());
-        }
-
-        self.put_slice(payload_length_bytes_slice);
+        self.put_slice(payload_length_bytes.as_ref());
         self.put_slice(payload);
 
         Ok(())
