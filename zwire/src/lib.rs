@@ -9,7 +9,7 @@ pub use codec::{
 use errors::WireError;
 
 pub mod __zwire_macros_support {
-    pub use crate::codec::wired::{WiredFixedBytes, WiredInt, WiredIntField, WiredLengthPrefixed};
+    pub use crate::codec::wired::{WiredFixedBytes, WiredInt, WiredIntInner, WiredLengthPrefixed};
     pub use tokio_util::bytes::Bytes;
 }
 

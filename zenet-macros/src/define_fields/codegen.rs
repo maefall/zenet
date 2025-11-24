@@ -15,7 +15,7 @@ pub fn expand_define_fields(input: DefineFieldsInput) -> TokenStream2 {
             quote! { #n }
         } else {
             let ty = &field.ty;
-            quote! { <#ty as crate::__zwire_macros_support::WiredInt>::SIZE }
+            quote! { <#ty as crate::__zwire_macros_support::WiredIntInner>::SIZE }
         }
     });
 
@@ -83,7 +83,7 @@ pub fn expand_define_fields(input: DefineFieldsInput) -> TokenStream2 {
             let length_field_impl = if is_length_prefix {
                 Some(quote! {
                     impl crate::__zwire_macros_support::WiredLengthPrefixed for Wired {
-                        type Int = #ty;
+                        type Inner = #ty;
 
                         const FIELD_NAME: &'static str = #name_str;
                         #max_length_item
@@ -97,8 +97,8 @@ pub fn expand_define_fields(input: DefineFieldsInput) -> TokenStream2 {
                 pub mod #module_ident {
                     pub struct Wired(pub #ty);
 
-                    impl crate::__zwire_macros_support::WiredIntField for Wired {
-                        type Int = #ty;
+                    impl crate::__zwire_macros_support::WiredInt for Wired {
+                        type Inner = #ty;
 
                         const FIELD_NAME: &'static str = #name_str;
                     }

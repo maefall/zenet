@@ -1,4 +1,4 @@
-use super::super::wired::{WiredInt, WiredLengthPrefixed};
+use super::super::wired::{WiredIntInner, WiredLengthPrefixed};
 use crate::WireError;
 use std::marker::PhantomData;
 use tokio_util::bytes::BytesMut;
@@ -16,7 +16,7 @@ impl<I: WiredLengthPrefixed> PeekLength<I> {
     }
 
     pub fn header_size(&self) -> usize {
-        I::Int::SIZE
+        I::Inner::SIZE
     }
 
     #[inline]
@@ -49,7 +49,7 @@ impl BytesPeekExt for BytesMut {
     ) -> Result<PeekLength<I>, WireError> {
         const DEFAULT_LENGTH: usize = 0;
 
-        let size = I::Int::SIZE;
+        let size = I::Inner::SIZE;
         let end_offset = start_offset.saturating_add(size);
 
         if self.len() < end_offset {
@@ -62,7 +62,7 @@ impl BytesPeekExt for BytesMut {
 
         let prefix = &self[start_offset..end_offset];
 
-        Ok(match I::Int::read(prefix, field_name)? {
+        Ok(match I::Inner::read(prefix, field_name)? {
             Some(length) => PeekLength {
                 ready: true,
                 length,

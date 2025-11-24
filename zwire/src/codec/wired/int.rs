@@ -66,7 +66,7 @@ macro_rules! impl_read {
 
 macro_rules! impl_wired_int_for {
     ($ty:ty) => {
-        impl WiredInt for $ty {
+        impl WiredIntInner for $ty {
             type Int = $ty;
 
             impl_max_and_byte_array!();
@@ -84,13 +84,13 @@ impl_wired_int_for!(u32);
 impl_wired_int_for!(u64);
 impl_wired_int_for!(u128);
 
-pub trait WiredIntField {
-    type Int: WiredInt;
+pub trait WiredInt {
+    type Inner: WiredIntInner;
 
     const FIELD_NAME: &'static str;
 }
 
-pub trait WiredInt: Sized {
+pub trait WiredIntInner: Sized {
     type Int: Copy;
     type ByteArray: AsRef<[u8]> + AsMut<[u8]> + Sized;
 

@@ -1,11 +1,11 @@
-use super::super::wired::{WiredFixedBytes, WiredInt, WiredIntField, WiredLengthPrefixed};
+use super::super::wired::{WiredFixedBytes, WiredInt, WiredIntInner, WiredLengthPrefixed};
 use crate::{errors::WireError, helpers::CheckedAddWire};
 use tokio_util::bytes::{Buf, Bytes, BytesMut};
 
 pub trait BytesMutTakeExt {
-    fn take_single<I: WiredIntField>(
+    fn take_single<I: WiredInt>(
         &mut self,
-    ) -> Option<<<I as WiredIntField>::Int as WiredInt>::Int>;
+    ) -> Option<<<I as WiredInt>::Inner as WiredIntInner>::Int>;
     fn take_fixed_bytes<F: WiredFixedBytes>(&mut self) -> Option<F::Output>;
     fn take_length_prefixed<I: WiredLengthPrefixed>(&mut self) -> Result<Option<Bytes>, WireError>;
 }
@@ -24,11 +24,11 @@ impl BytesMutTakeExt for BytesMut {
         Some(F::from_bytes(chunk))
     }
 
-    fn take_single<I: WiredIntField>(
+    fn take_single<I: WiredInt>(
         &mut self,
-    ) -> Option<<<I as WiredIntField>::Int as WiredInt>::Int> {
-        let size = I::Int::SIZE;
-        let value = I::Int::read_raw(&self[..size])?;
+    ) -> Option<<<I as WiredInt>::Inner as WiredIntInner>::Int> {
+        let size = I::Inner::SIZE;
+        let value = I::Inner::read_raw(&self[..size])?;
 
         self.advance(size);
 
@@ -36,14 +36,14 @@ impl BytesMutTakeExt for BytesMut {
     }
 
     fn take_length_prefixed<I: WiredLengthPrefixed>(&mut self) -> Result<Option<Bytes>, WireError> {
-        let size = I::Int::SIZE;
+        let size = I::Inner::SIZE;
         let max_payload_length = I::MAX_LENGTH;
 
         if self.len() < size {
             return Ok(None);
         }
 
-        let Some(expected_payload_length) = I::Int::read(&self[..size], "payload_length")? else {
+        let Some(expected_payload_length) = I::Inner::read(&self[..size], "payload_length")? else {
             return Ok(None);
         };
 

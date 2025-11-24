@@ -1,12 +1,12 @@
 use crate::{
-    codec::wired::{WiredFixedBytes, WiredInt, WiredIntField, WiredLengthPrefixed},
+    codec::wired::{WiredFixedBytes, WiredInt, WiredIntInner, WiredLengthPrefixed},
     WireError,
 };
 use tokio_util::bytes::{BufMut, Bytes, BytesMut};
 
 pub trait BytesMutPutExt {
     fn put_fixed_bytes<F: WiredFixedBytes>(&mut self, bytes: &Bytes) -> Result<(), WireError>;
-    fn put_single<I: WiredIntField>(&mut self, value: <<I as WiredIntField>::Int as WiredInt>::Int);
+    fn put_single<I: WiredInt>(&mut self, value: <<I as WiredInt>::Inner as WiredIntInner>::Int);
     fn put_length_prefixed<I: WiredLengthPrefixed>(
         &mut self,
         payload: &Bytes,
@@ -32,11 +32,8 @@ impl BytesMutPutExt for BytesMut {
         Ok(())
     }
 
-    fn put_single<I: WiredIntField>(
-        &mut self,
-        value: <<I as WiredIntField>::Int as WiredInt>::Int,
-    ) {
-        let bytes = <I::Int as WiredInt>::to_bytes(value);
+    fn put_single<I: WiredInt>(&mut self, value: <<I as WiredInt>::Inner as WiredIntInner>::Int) {
+        let bytes = <I::Inner as WiredIntInner>::to_bytes(value);
 
         self.put_slice(bytes.as_ref());
     }
@@ -46,16 +43,17 @@ impl BytesMutPutExt for BytesMut {
         payload: &Bytes,
     ) -> Result<(), WireError> {
         let payload_length = payload.len();
+        let max_length = I::Inner::MAX;
 
-        if payload_length > I::Int::MAX {
+        if payload_length > max_length {
             return Err(WireError::Oversized(
                 I::FIELD_NAME,
                 payload_length,
-                I::Int::MAX,
+                max_length,
             ));
         }
 
-        let payload_length_bytes = I::Int::to_bytes_from_usize(payload_length);
+        let payload_length_bytes = I::Inner::to_bytes_from_usize(payload_length);
 
         self.put_slice(payload_length_bytes.as_ref());
         self.put_slice(payload);

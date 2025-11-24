@@ -1,7 +1,7 @@
-use super::WiredInt;
+use super::WiredIntInner;
 
 pub trait WiredLengthPrefixed {
-    type Int: WiredInt;
+    type Inner: WiredIntInner;
 
     const FIELD_NAME: &'static str;
     const MAX_LENGTH: usize;
