@@ -8,4 +8,5 @@ tracing = { workspace = true }
 miette = { workspace = true }
 thiserror = { workspace = true }
 tokio-util = { workspace = true }
+zenet-macros = { path = "../zenet-macros" }
 bytestr = "0.3.1"

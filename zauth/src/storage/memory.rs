@@ -1,3 +1,4 @@
+use super::StorageError;
 use dashmap::{mapref::entry::Entry, DashMap};
 use secrecy::SecretSlice;
 use std::{
@@ -5,10 +6,8 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use super::StorageError;
-use tokio_util::bytes::Bytes;
 
-type Nonce = Bytes;
+type Nonce = u128;
 type Timestamp = u64;
 type NonceEntry = (Nonce, Timestamp);
 type NonceDeque = VecDeque<NonceEntry>;
@@ -43,7 +42,7 @@ impl super::AuthStore for InMemoryStore {
     fn insert_nonce(
         &self,
         client_id: &str,
-        nonce: Bytes,
+        nonce: u128,
         timestamp: u64,
         ttl: Duration,
     ) -> Result<bool, StorageError> {
@@ -74,14 +73,14 @@ impl super::AuthStore for InMemoryStore {
                     }
                 }
 
-                deque.push_back((nonce.clone(), timestamp));
+                deque.push_back((nonce, timestamp));
                 set.insert(nonce);
                 Ok(true)
             }
             Entry::Vacant(entry) => {
                 let mut deque = VecDeque::new();
                 let mut set = HashSet::new();
-                deque.push_back((nonce.clone(), timestamp));
+                deque.push_back((nonce, timestamp));
                 set.insert(nonce);
                 entry.insert((deque, set));
                 Ok(true)

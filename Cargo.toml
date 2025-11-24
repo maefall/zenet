@@ -27,6 +27,7 @@ zauth = ["zwire", "dep:zauth" ]
 [workspace]
 members = [
 	"zauth",
+	"zenet-macros",
     "zwire",
 ]
 

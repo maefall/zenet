@@ -1,9 +1,9 @@
-use super::length_prefix::LengthPrefix;
+use super::{CheckedAddWire, WiredInt};
 use crate::errors::WireError;
 use tokio_util::bytes::{Buf, Bytes, BytesMut};
 
 pub trait BytesMutTakeExt {
-    fn take_length_prefixed_payload<T: LengthPrefix>(
+    fn take_length_prefixed<I: WiredInt>(
         &mut self,
         max_payload_length: usize,
         payload_field_name: &'static str,
@@ -11,21 +11,19 @@ pub trait BytesMutTakeExt {
 }
 
 impl BytesMutTakeExt for BytesMut {
-    #[inline]
-    fn take_length_prefixed_payload<T: LengthPrefix>(
+    fn take_length_prefixed<I: WiredInt>(
         &mut self,
         max_payload_length: usize,
         payload_field_name: &'static str,
     ) -> Result<Option<Bytes>, WireError> {
-        let width = T::WIDTH;
+        let size = I::SIZE;
 
-        if self.len() < width {
+        if self.len() < size {
             return Ok(None);
         }
 
-        let expected_payload_length = match T::read(&self[..width]) {
-            Some(n) => n,
-            None => return Ok(None),
+        let Some(expected_payload_length) = I::read(&self[..size], "payload_length")? else {
+            return Ok(None);
         };
 
         if expected_payload_length > max_payload_length {
@@ -36,13 +34,17 @@ impl BytesMutTakeExt for BytesMut {
             ));
         }
 
-        let total_length = width.saturating_add(expected_payload_length);
+        let total_length = size.checked_add_wire(
+            "LENGTH_PREFIX_HEADER_SIZE",
+            expected_payload_length,
+            "payload_length",
+        )?;
 
         if self.len() < total_length {
             return Ok(None);
         }
 
-        self.advance(width);
+        self.advance(size);
 
         let bytes = self.split_to(expected_payload_length).freeze();
 

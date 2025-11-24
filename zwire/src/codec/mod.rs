@@ -6,32 +6,41 @@ pub use peek::BytesPeekExt;
 mod take;
 pub use take::BytesMutTakeExt;
 
-mod length_prefix;
+mod put;
+pub use put::BytesMutPutExt;
+
+mod wired_int;
+pub use wired_int::WiredInt;
+
+mod checked_add;
+pub use checked_add::CheckedAddWire;
+
+pub use zenet_macros::define_fields;
 
 use crate::{errors::WireError, Frame, Message};
 use tokio_util::{
-    bytes::{Buf, BufMut, BytesMut},
+    bytes::{Buf, BytesMut},
     codec::{Decoder, Encoder},
 };
 
-const MESSAGE_TYPE_FIELD_LENGTH: usize = 1;
-const PAYLOAD_LENGTH_FIELD_LENGTH: usize = 2;
-const HEADER_LENGTH: usize = MESSAGE_TYPE_FIELD_LENGTH + PAYLOAD_LENGTH_FIELD_LENGTH;
-const PAYLOAD_LENGTH_OFFSET: usize = 1;
+define_fields! {
+    (Message, u8, 0, fixed),
+    (Payload, u16, 1, length_prefix),
+}
 
 #[derive(Clone, Copy)]
 pub struct FrameCodec {
-    max_payload_length: usize,
     max_length: usize,
+    max_payload_length: usize,
 }
 
 impl Default for FrameCodec {
     fn default() -> Self {
-        let max_payload_length = usize::MAX;
+        const DEFAULT_MAX_PAYLOAD_LENGTH: usize = 1300;
 
         FrameCodec {
-            max_payload_length,
-            max_length: max_payload_length.saturating_add(HEADER_LENGTH),
+            max_length: DEFAULT_MAX_PAYLOAD_LENGTH + FIXED_PART_LENGTH,
+            max_payload_length: DEFAULT_MAX_PAYLOAD_LENGTH,
         }
     }
 }
@@ -50,7 +59,7 @@ impl Encoder<Frame> for FrameCodec {
             ));
         }
 
-        if self.max_length > self.max_payload_length {
+        if payload_length > self.max_payload_length {
             return Err(WireError::Oversized(
                 "payload_length",
                 payload_length,
@@ -58,20 +67,28 @@ impl Encoder<Frame> for FrameCodec {
             ));
         }
 
-        let total_length =
-            HEADER_LENGTH
-                .checked_add(payload_length)
-                .ok_or(WireError::Oversized(
-                    "total_length",
-                    payload_length,
-                    self.max_length,
-                ))?;
+        let total_length = FIXED_PART_LENGTH.checked_add_wire(
+            "FIXED_PART_LENGTH",
+            payload_length,
+            "payload_length",
+        )?;
+
+        if total_length > self.max_length {
+            return Err(WireError::Oversized(
+                "total_length",
+                total_length,
+                self.max_length,
+            ));
+        }
 
         destination.reserve(total_length);
 
-        destination.put_u8(frame.message_type as u8); // repr
-        destination.put_u16(payload_length as u16);
-        destination.extend_from_slice(&frame.payload);
+        destination.put_single::<MessageWired>(frame.message_type as MessageWired); // repr
+        destination.put_length_prefixed::<PayloadWired>(
+            &frame.payload,
+            "payload_length",
+            Some(PAYLOAD_FIELD_OFFSET),
+        )?;
 
         Ok(())
     }
@@ -86,17 +103,34 @@ impl Decoder for FrameCodec {
             return Ok(None);
         }
 
-        let payload_length_peek = source.peek_at::<u16>(PAYLOAD_LENGTH_OFFSET);
-        let payload_length = payload_length_peek.length;
+        let Some(payload_length) = source
+            .peek_at::<PayloadWired>(PAYLOAD_FIELD_OFFSET, "payload_length")?
+            .get()
+        else {
+            return Ok(None);
+        };
 
-        let total_length =
-            HEADER_LENGTH
-                .checked_add(payload_length)
-                .ok_or(WireError::Oversized(
-                    "total_length",
-                    payload_length,
-                    self.max_payload_length,
-                ))?;
+        if payload_length > self.max_payload_length {
+            return Err(WireError::Oversized(
+                "payload_length",
+                payload_length,
+                self.max_payload_length,
+            ));
+        }
+
+        let total_length = FIXED_PART_LENGTH.checked_add_wire(
+            "FIXED_PART_LENGTH",
+            payload_length,
+            "payload_length",
+        )?;
+
+        if total_length > self.max_length {
+            return Err(WireError::Oversized(
+                "total_length",
+                total_length,
+                self.max_length,
+            ));
+        }
 
         if source.len() < total_length {
             return Ok(None);
@@ -105,15 +139,13 @@ impl Decoder for FrameCodec {
         let message_type = Message::try_from(source.get_u8())?;
 
         if let Some(payload) =
-            source.take_length_prefixed_payload::<u16>(self.max_payload_length, "payload")?
+            source.take_length_prefixed::<PayloadWired>(self.max_payload_length, "payload")?
         {
             Ok(Some(Frame {
                 message_type,
                 payload,
             }))
         } else {
-            println!("Payload not present after complete frame");
-
             Ok(None)
         }
     }
