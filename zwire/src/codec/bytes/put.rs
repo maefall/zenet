@@ -5,8 +5,8 @@ use crate::{
 use tokio_util::bytes::{BufMut, Bytes, BytesMut};
 
 pub trait BytesMutPutExt {
-    fn put_fixed_bytes<F: WiredFixedBytes>(&mut self, bytes: &Bytes) -> Result<(), WireError>;
     fn put_single<I: WiredInt>(&mut self, value: <<I as WiredInt>::Inner as WiredIntInner>::Int);
+    fn put_fixed_bytes<F: WiredFixedBytes>(&mut self, bytes: &Bytes) -> Result<(), WireError>;
     fn put_length_prefixed<I: WiredLengthPrefixed>(
         &mut self,
         payload: &Bytes,
@@ -14,6 +14,13 @@ pub trait BytesMutPutExt {
 }
 
 impl BytesMutPutExt for BytesMut {
+    #[inline]
+    fn put_single<I: WiredInt>(&mut self, value: <<I as WiredInt>::Inner as WiredIntInner>::Int) {
+        let bytes = <I::Inner as WiredIntInner>::to_bytes(value);
+
+        self.put_slice(bytes.as_ref());
+    }
+
     #[inline]
     fn put_fixed_bytes<B: WiredFixedBytes>(&mut self, payload: &Bytes) -> Result<(), WireError> {
         let payload_length = payload.len();
@@ -30,12 +37,6 @@ impl BytesMutPutExt for BytesMut {
         self.extend_from_slice(payload);
 
         Ok(())
-    }
-
-    fn put_single<I: WiredInt>(&mut self, value: <<I as WiredInt>::Inner as WiredIntInner>::Int) {
-        let bytes = <I::Inner as WiredIntInner>::to_bytes(value);
-
-        self.put_slice(bytes.as_ref());
     }
 
     fn put_length_prefixed<I: WiredLengthPrefixed>(

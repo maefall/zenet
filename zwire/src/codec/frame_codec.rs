@@ -113,16 +113,11 @@ impl Decoder for FrameCodec {
             return Ok(None);
         }
 
-        let Some(message_code) = source.take_single::<fields::message::Wired>() else {
-            return Ok(None);
-        };
-
+        let message_code = source.take_single_unchecked::<fields::message::Wired>();
         let message = Message::try_from(message_code)?;
 
-        if let Some(payload) = source.take_length_prefixed::<fields::payload::Wired>()? {
-            Ok(Some(Frame { message, payload }))
-        } else {
-            Ok(None)
-        }
+        let payload = source.take_length_prefixed_unchecked::<fields::payload::Wired>()?;
+
+        Ok(Some(Frame { message, payload }))
     }
 }

@@ -33,16 +33,14 @@ macro_rules! impl_max_and_byte_array {
     };
 }
 
-macro_rules! impl_read_raw {
+macro_rules! impl_read_raw_unchecked {
     () => {
         #[inline]
-        fn read_raw(source: &[u8]) -> Option<Self::Int> {
-            length_check!(source);
-
+        fn read_raw_unchecked(source: &[u8]) -> Self::Int {
             let pointer = source.as_ptr() as *const Self::Int;
             let value: Self::Int = unsafe { pointer.read_unaligned() };
 
-            Some(value.to_be())
+            value.to_be()
         }
     };
 }
@@ -64,16 +62,35 @@ macro_rules! impl_read {
     };
 }
 
+macro_rules! impl_read_unchecked {
+    () => {
+        #[inline]
+        fn read_unchecked(source: &[u8], field_name: &'static str) -> Result<usize, WireError> {
+            let raw_value = Self::read_raw_unchecked(source);
+
+            let value: usize = raw_value.try_into().map_err(|_| {
+                WireError::LengthOverflow(field_name, raw_value as u128, usize::MAX)
+            })?;
+
+            Ok(value)
+        }
+    };
+}
+
 macro_rules! impl_wired_int_for {
     ($ty:ty) => {
         impl WiredIntInner for $ty {
             type Int = $ty;
 
             impl_max_and_byte_array!();
+
             impl_to_bytes!();
             impl_to_bytes_from_usize!();
-            impl_read_raw!();
+
+            impl_read_raw_unchecked!();
+
             impl_read!();
+            impl_read_unchecked!();
         }
     };
 }
@@ -97,7 +114,14 @@ pub trait WiredIntInner: Sized {
     const SIZE: usize = std::mem::size_of::<Self::Int>();
     const MAX: usize;
 
-    fn read_raw(source: &[u8]) -> Option<Self::Int>;
+    fn read_raw_unchecked(source: &[u8]) -> Self::Int;
+    fn read_raw(source: &[u8]) -> Option<Self::Int> {
+        length_check!(source);
+
+        Some(Self::read_raw_unchecked(source))
+    }
+
+    fn read_unchecked(source: &[u8], field_name: &'static str) -> Result<usize, WireError>;
     fn read(source: &[u8], field_name: &'static str) -> Result<Option<usize>, WireError>;
 
     fn to_bytes_from_usize(value: usize) -> Self::ByteArray;
