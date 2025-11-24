@@ -116,23 +116,15 @@ impl Decoder for AuthPayloadCodec {
             return Ok(None);
         }
 
-        let Some(timestamp) = source.take_single::<fields::timestamp::Wired>() else {
-            return Ok(None);
-        };
-
-        let Some(nonce) = source.take_single::<fields::nonce::Wired>() else {
-            return Ok(None);
-        };
+        let timestamp = source.take_single_unchecked::<fields::timestamp::Wired>();
+        let nonce = source.take_single_unchecked::<fields::nonce::Wired>();
 
         let Some(mac) = source.take_fixed_bytes::<fields::mac::Wired>() else {
             return Ok(None);
         };
 
-        let Ok(Some(client_identifier_bytes)) =
-            source.take_length_prefixed::<fields::clientidentifier::Wired>()
-        else {
-            return Ok(None);
-        };
+        let client_identifier_bytes =
+            source.take_length_prefixed_unchecked::<fields::clientidentifier::Wired>()?;
 
         let client_identifier = client_identifier_bytes.to_bytestr_field(
             "client_identifier",
