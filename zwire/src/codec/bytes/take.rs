@@ -10,8 +10,8 @@ pub trait BytesMutTakeExt {
         &mut self,
     ) -> <<I as WiredInt>::Inner as WiredIntInner>::Int;
 
-    fn take_fixed_bytes<F: WiredFixedBytes>(&mut self) -> Option<F::Output>;
     fn take_fixed_bytes_unchecked<F: WiredFixedBytes>(&mut self) -> F::Output;
+    fn take_fixed_bytes<F: WiredFixedBytes>(&mut self) -> Option<F::Output>;
 
     fn take_length_prefixed_unchecked<I: WiredLengthPrefixed>(
         &mut self,
