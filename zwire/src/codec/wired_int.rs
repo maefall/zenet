@@ -84,6 +84,13 @@ impl_wired_int_for!(u32);
 impl_wired_int_for!(u64);
 impl_wired_int_for!(u128);
 
+
+pub trait WiredIntField {
+    type Int: WiredInt;
+
+    const FIELD_NAME: &'static str;
+}
+
 pub trait WiredInt: Sized {
     type Int: Copy;
     type ByteArray: AsRef<[u8]> + AsMut<[u8]> + Sized;

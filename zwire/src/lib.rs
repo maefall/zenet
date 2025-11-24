@@ -1,17 +1,24 @@
 pub mod codec;
 pub mod errors;
 
-pub use codec::{FrameCodec, bytestring::ByteStr};
+pub use codec::{bytestring::ByteStr, FrameCodec};
 use errors::WireError;
 use tokio_util::{
-    bytes::{Bytes, BytesMut},
+    bytes::BytesMut,
     codec::{Decoder, Encoder},
 };
+
+pub type Bytes = tokio_util::bytes::Bytes;
+
+pub mod __zwire_macros_support {
+    pub use crate::codec::{WiredFixedBytes, WiredInt, WiredLengthPrefixed, WiredIntField};
+    pub use tokio_util::bytes::Bytes;
+}
 
 // [1:message_type 2:payload_length payload_length:payload]
 #[derive(Debug, Clone)]
 pub struct Frame {
-    pub message_type: Message,
+    pub message: Message,
     pub payload: Bytes,
 }
 
@@ -36,13 +43,19 @@ impl TryFrom<u8> for Message {
     }
 }
 
+impl From<Message> for u8 {
+    fn from(message: Message) -> Self {
+        message as u8
+    }
+}
+
 pub trait EncodeIntoFrame: Encoder<Self::EncodeItem> {
     type EncodeItem;
 
     fn encode_into_frame(
         &mut self,
         payload: Self::EncodeItem,
-        message_type: Message,
+        message: Message,
         codec_buffer: &mut BytesMut,
     ) -> Result<Frame, Self::Error> {
         let start_offset = codec_buffer.len();
@@ -52,7 +65,7 @@ pub trait EncodeIntoFrame: Encoder<Self::EncodeItem> {
         let payload_bytes = codec_buffer.split_off(start_offset);
 
         Ok(Frame {
-            message_type,
+            message,
             payload: payload_bytes.freeze(),
         })
     }
@@ -70,7 +83,7 @@ pub trait DecodeFromFrame: Decoder {
         codec_buffer.extend_from_slice(&frame.payload);
 
         if let Some(payload) = self.decode(codec_buffer)? {
-            Ok(Some((payload, frame.message_type)))
+            Ok(Some((payload, frame.message)))
         } else {
             Ok(None)
         }

@@ -6,6 +6,11 @@ pub use authenticator::Authenticator;
 pub use codec::AuthPayloadCodec;
 pub use storage::{memory::InMemoryStore, AuthStore, StorageError};
 
+pub mod __zwire_macros_support {
+    pub use zwire::codec::{WiredFixedBytes, WiredInt, WiredLengthPrefixed, WiredIntField};
+    pub use tokio_util::bytes::Bytes;
+}
+
 use authenticator::auth_mac;
 use zwire::codec::bytestring::ByteStr;
 use hmac::digest::InvalidLength;
