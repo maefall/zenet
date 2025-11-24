@@ -28,12 +28,12 @@ impl<S: AuthStore> Authenticator<S> {
 
         if auth_status {
             Frame {
-                message_type: Message::AuthValid,
+                message: Message::AuthValid,
                 payload: Bytes::new(),
             }
         } else {
             Frame {
-                message_type: Message::AuthInvalid,
+                message: Message::AuthInvalid,
                 payload: Bytes::new(),
             }
         }

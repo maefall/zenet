@@ -1,11 +1,11 @@
 use crate::AuthPayload;
 use tokio_util::{
-    bytes::{Buf, BytesMut},
+    bytes::BytesMut,
     codec::{Decoder, Encoder},
 };
 use zwire::{
     codec::bytestring::{ByteStringFieldExt, ByteStringFieldPolicy},
-    codec::{define_fields, BytesMutPutExt, BytesPeekExt, CheckedAddWire, WiredInt},
+    codec::{define_fields, BytesMutPutExt, BytesMutTakeExt, BytesPeekExt, CheckedAddWire},
     errors::WireError,
     DecodeFromFrame, EncodeIntoFrame,
 };
@@ -24,20 +24,17 @@ pub struct AuthPayloadCodec {
 impl Default for AuthPayloadCodec {
     fn default() -> Self {
         Self {
-            max_length: FIXED_PART_LENGTH + MAX_CLIENT_IDENTIFIER_LENGTH + MAC_LENGTH,
+            max_length: fields::MAX_LENGTH,
         }
     }
 }
 
-const MAX_CLIENT_IDENTIFIER_LENGTH: usize = 255;
-const MAC_LENGTH: usize = 32; // what could we do about this?
-
 // [u64 timestamp] | [u128 nonce] | [mac] | [u8 length][client_id...]|
 define_fields! {
-    (Timestamp, u64, 0, fixed),
-    (Nonce, u128, 8, fixed),
-    // (Mac, usize, 24),
-    (ClientIdentifier, u8, 56, length_prefix),
+    (Timestamp, u64, fixed),
+    (Nonce, u128, fixed),
+    (Mac, 32, fixed),
+    (ClientIdentifier, u8, length_prefix, 255),
 }
 
 impl Encoder<AuthPayload> for AuthPayloadCodec {
@@ -50,17 +47,18 @@ impl Encoder<AuthPayload> for AuthPayloadCodec {
     ) -> Result<(), Self::Error> {
         let client_id_bytes = auth_payload.client_identifier.as_bytes();
         let client_id_length = client_id_bytes.len();
+        let client_id_max_length = fields::clientidentifier::MAX_LENGTH;
 
-        if client_id_length > MAX_CLIENT_IDENTIFIER_LENGTH {
+        if client_id_length > client_id_max_length {
             return Err(WireError::Oversized(
                 "client_identifier_length",
                 client_id_length,
-                MAX_CLIENT_IDENTIFIER_LENGTH,
+                client_id_max_length,
             ));
         }
 
-        let total_length = (FIXED_PART_LENGTH + MAC_LENGTH).checked_add_wire(
-            "FIXED_PART_LENGTH + MAC_LENGTH",
+        let total_length = fields::FIXED_PART_LENGTH.checked_add_wire(
+            "FIXED_PART_LENGTH",
             client_id_length,
             "client_id_length",
         )?;
@@ -73,11 +71,11 @@ impl Encoder<AuthPayload> for AuthPayloadCodec {
             ));
         }
 
-        destination.put_single::<TimestampWired>(auth_payload.timestamp);
-        destination.put_single::<NonceWired>(auth_payload.nonce);
-        destination.append_bytes(&auth_payload.mac, MAC_LENGTH, "mac", None)?;
+        destination.put_single::<fields::timestamp::Wired>(auth_payload.timestamp);
+        destination.put_single::<fields::nonce::Wired>(auth_payload.nonce);
+        destination.put_fixed_bytes::<fields::mac::Wired>(&auth_payload.mac)?;
 
-        destination.put_length_prefixed::<ClientIdentifierWired>(
+        destination.put_length_prefixed::<fields::clientidentifier::Wired>(
             client_id_bytes,
             "client_identifier",
             None,
@@ -93,8 +91,8 @@ impl Decoder for AuthPayloadCodec {
 
     fn decode(&mut self, source: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let Some(client_id_length) = source
-            .peek_at::<ClientIdentifierWired>(
-                CLIENTIDENTIFIER_FIELD_OFFSET,
+            .peek_at::<fields::clientidentifier::Wired>(
+                fields::clientidentifier::OFFSET,
                 "client_identifier_length",
             )?
             .get()
@@ -102,8 +100,8 @@ impl Decoder for AuthPayloadCodec {
             return Ok(None);
         };
 
-        let total_length = (FIXED_PART_LENGTH + MAC_LENGTH).checked_add_wire(
-            "FIXED_PART_LENGTH + MAC_LENGTH",
+        let total_length = fields::FIXED_PART_LENGTH.checked_add_wire(
+            "FIXED_PART_LENGTH",
             client_id_length,
             "client_id_length",
         )?;
@@ -120,21 +118,27 @@ impl Decoder for AuthPayloadCodec {
             return Ok(None);
         }
 
-        let timestamp = source.get_u64();
-        let nonce = source.get_u128();
+        let Some(timestamp) = source.take_single::<fields::timestamp::Wired>() else {
+            return Ok(None);
+        };
 
-        let tail_len = MAC_LENGTH + ClientIdentifierWired::SIZE + client_id_length;
+        let Some(nonce) = source.take_single::<fields::nonce::Wired>() else {
+            return Ok(None);
+        };
 
-        let mut tail = source.split_to(tail_len);
+        let Some(mac) = source.take_fixed_bytes::<fields::mac::Wired>() else {
+            return Ok(None);
+        };
 
-        let mac = tail.split_to(MAC_LENGTH).freeze();
+        let Ok(Some(client_identifier_bytes)) =
+            source.take_length_prefixed::<fields::clientidentifier::Wired>()
+        else {
+            return Ok(None);
+        };
 
-        tail.advance(ClientIdentifierWired::SIZE);
-
-        let client_identifier_bytes = tail.split_to(client_id_length).freeze();
         let client_identifier = client_identifier_bytes.to_bytestr_field(
             "client_identifier",
-            Some(MAX_CLIENT_IDENTIFIER_LENGTH),
+            None,
             ByteStringFieldPolicy::AsciiHyphen,
         )?;
 

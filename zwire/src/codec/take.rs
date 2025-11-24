@@ -1,34 +1,55 @@
-use super::{CheckedAddWire, WiredInt};
+use super::{CheckedAddWire, WiredFixedBytes, WiredInt, WiredIntField, WiredLengthPrefixed};
 use crate::errors::WireError;
 use tokio_util::bytes::{Buf, Bytes, BytesMut};
 
 pub trait BytesMutTakeExt {
-    fn take_length_prefixed<I: WiredInt>(
+    fn take_single<I: WiredIntField>(
         &mut self,
-        max_payload_length: usize,
-        payload_field_name: &'static str,
-    ) -> Result<Option<Bytes>, WireError>;
+    ) -> Option<<<I as WiredIntField>::Int as WiredInt>::Int>;
+    fn take_fixed_bytes<F: WiredFixedBytes>(&mut self) -> Option<F::Output>;
+    fn take_length_prefixed<I: WiredLengthPrefixed>(&mut self) -> Result<Option<Bytes>, WireError>;
 }
 
 impl BytesMutTakeExt for BytesMut {
-    fn take_length_prefixed<I: WiredInt>(
+    #[inline]
+    fn take_fixed_bytes<F: WiredFixedBytes>(&mut self) -> Option<F::Output> {
+        let size = F::SIZE;
+
+        if self.len() < size {
+            return None;
+        }
+
+        let chunk: Bytes = self.split_to(size).freeze();
+
+        Some(F::from_bytes(chunk))
+    }
+
+    fn take_single<I: WiredIntField>(
         &mut self,
-        max_payload_length: usize,
-        payload_field_name: &'static str,
-    ) -> Result<Option<Bytes>, WireError> {
-        let size = I::SIZE;
+    ) -> Option<<<I as WiredIntField>::Int as WiredInt>::Int> {
+        let size = I::Int::SIZE;
+        let value = I::Int::read_raw(&self[..size])?;
+
+        self.advance(size);
+
+        Some(value)
+    }
+
+    fn take_length_prefixed<I: WiredLengthPrefixed>(&mut self) -> Result<Option<Bytes>, WireError> {
+        let size = I::Int::SIZE;
+        let max_payload_length = I::MAX_LENGTH;
 
         if self.len() < size {
             return Ok(None);
         }
 
-        let Some(expected_payload_length) = I::read(&self[..size], "payload_length")? else {
+        let Some(expected_payload_length) = I::Int::read(&self[..size], "payload_length")? else {
             return Ok(None);
         };
 
         if expected_payload_length > max_payload_length {
             return Err(WireError::Oversized(
-                payload_field_name,
+                I::FIELD_NAME,
                 expected_payload_length,
                 max_payload_length,
             ));

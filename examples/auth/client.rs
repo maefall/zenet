@@ -49,7 +49,7 @@ async fn run_client(
         let mut framed_reader = FramedRead::new(recv, frame_codec());
 
         while let Ok(Some(frame)) = framed_reader.try_next().await {
-            info!("{:?}", frame.message_type);
+            info!("{:?}", frame.message);
         }
     });
 
