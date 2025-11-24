@@ -1,4 +1,7 @@
-use crate::{codec::WiredInt, WireError};
+use crate::{
+    codec::{CheckedAddWire, WiredInt},
+    WireError,
+};
 use tokio_util::bytes::{BufMut, Bytes, BytesMut};
 
 pub trait BytesMutPutExt {
@@ -38,7 +41,8 @@ impl BytesMutPutExt for BytesMut {
         }
 
         if let Some(offset) = offset {
-            let required_length = offset + payload_length;
+            let required_length =
+                offset.checked_add_wire("REQUIRED_LENGTH", payload_length, "payload_length")?;
 
             if self.len() < required_length {
                 self.resize(required_length, 0);
@@ -81,8 +85,12 @@ impl BytesMutPutExt for BytesMut {
         let payload_length_bytes_slice = payload_length_bytes.as_ref();
 
         if let Some(offset) = offset {
-            let header_length = offset + I::SIZE;
-            let total_length = header_length + payload_length;
+            let header_length = offset.checked_add_wire("OFFSET", I::SIZE, "LENGTH_PREFIX_SIZE")?;
+            let total_length = header_length.checked_add_wire(
+                "OFFSET + LENGTH_PREFIX_SIZE",
+                payload_length,
+                "payload_length",
+            )?;
 
             if self.len() < total_length {
                 self.resize(total_length, 0);
