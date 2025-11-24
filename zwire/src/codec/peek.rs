@@ -26,7 +26,7 @@ impl<I: WiredInt> PeekLength<I> {
     }
 
     #[inline]
-    pub fn get_total_seperated(&self) -> Option<(usize, usize)> {
+    pub fn get_total_separated(&self) -> Option<(usize, usize)> {
         if let Some(length) = self.get() {
             return Some((length, I::SIZE));
         }

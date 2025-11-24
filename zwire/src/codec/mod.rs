@@ -38,11 +38,9 @@ impl Default for FrameCodec {
     fn default() -> Self {
         const DEFAULT_MAX_PAYLOAD_LENGTH: usize = 1300;
 
-        let max_payload_length = usize::MAX;
-
         FrameCodec {
-            max_length: DEFAULT_MAX_PAYLOAD_LENGTH - FIXED_PART_LENGTH,
-            max_payload_length,
+            max_length: DEFAULT_MAX_PAYLOAD_LENGTH + FIXED_PART_LENGTH,
+            max_payload_length: DEFAULT_MAX_PAYLOAD_LENGTH,
         }
     }
 }
@@ -126,6 +124,14 @@ impl Decoder for FrameCodec {
             "payload_length",
         )?;
 
+        if total_length > self.max_length {
+            return Err(WireError::Oversized(
+                "total_length",
+                total_length,
+                self.max_length,
+            ));
+        }
+
         if source.len() < total_length {
             return Ok(None);
         }
@@ -133,7 +139,7 @@ impl Decoder for FrameCodec {
         let message_type = Message::try_from(source.get_u8())?;
 
         if let Some(payload) =
-            source.take_length_prefixed::<PayloadWired>(self.max_length, "payload")?
+            source.take_length_prefixed::<PayloadWired>(self.max_payload_length, "payload")?
         {
             Ok(Some(Frame {
                 message_type,
