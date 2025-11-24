@@ -1,21 +1,18 @@
+pub mod helpers;
 pub mod codec;
 pub mod errors;
 
-pub use codec::{bytestring::ByteStr, FrameCodec};
-use errors::WireError;
-use tokio_util::{
-    bytes::BytesMut,
-    codec::{Decoder, Encoder},
+pub use codec::{
+    bytes::{Bytes, BytesMut},
+    Decoder, Encoder, FrameCodec,
 };
-
-pub type Bytes = tokio_util::bytes::Bytes;
+use errors::WireError;
 
 pub mod __zwire_macros_support {
-    pub use crate::codec::{WiredFixedBytes, WiredInt, WiredLengthPrefixed, WiredIntField};
+    pub use crate::codec::wired::{WiredFixedBytes, WiredInt, WiredIntField, WiredLengthPrefixed};
     pub use tokio_util::bytes::Bytes;
 }
 
-// [1:message_type 2:payload_length payload_length:payload]
 #[derive(Debug, Clone)]
 pub struct Frame {
     pub message: Message,

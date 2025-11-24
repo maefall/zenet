@@ -1,4 +1,4 @@
-use crate::Bytes;
+use super::super::bytes::Bytes;
 
 pub trait WiredFixedBytes {
     const SIZE: usize;

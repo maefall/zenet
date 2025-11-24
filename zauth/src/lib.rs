@@ -7,16 +7,14 @@ pub use codec::AuthPayloadCodec;
 pub use storage::{memory::InMemoryStore, AuthStore, StorageError};
 
 pub mod __zwire_macros_support {
-    pub use zwire::codec::{WiredFixedBytes, WiredInt, WiredLengthPrefixed, WiredIntField};
-    pub use tokio_util::bytes::Bytes;
+    pub use zwire::__zwire_macros_support::*;
 }
 
 use authenticator::auth_mac;
-use zwire::codec::bytestring::ByteStr;
 use hmac::digest::InvalidLength;
-use rand::RngCore;
+use rand::Rng;
 use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
-use tokio_util::bytes::{Bytes, BytesMut, Buf};
+use zwire::codec::bytes::{string::ByteStr, Bytes};
 
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
 pub enum ZauthError {
@@ -40,12 +38,7 @@ pub struct AuthPayload {
 impl AuthPayload {
     pub fn new(client_identifier: ByteStr, key: &str) -> Result<Self, ZauthError> {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-
-        let mut nonce_buffer = BytesMut::zeroed(16);
-
-        rand::rng().fill_bytes(&mut nonce_buffer);
-
-        let nonce = nonce_buffer.freeze().get_u128();
+        let nonce: u128 = rand::rng().random();
         let mac = auth_mac(key.as_bytes(), &client_identifier, timestamp, nonce)?;
 
         Ok(AuthPayload {

@@ -1,4 +1,4 @@
-use super::{WiredInt, WiredLengthPrefixed};
+use super::super::wired::{WiredInt, WiredLengthPrefixed};
 use crate::WireError;
 use std::marker::PhantomData;
 use tokio_util::bytes::BytesMut;

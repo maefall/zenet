@@ -1,12 +1,15 @@
 use crate::AuthPayload;
-use tokio_util::{
-    bytes::BytesMut,
-    codec::{Decoder, Encoder},
-};
 use zwire::{
-    codec::bytestring::{ByteStringFieldExt, ByteStringFieldPolicy},
-    codec::{define_fields, BytesMutPutExt, BytesMutTakeExt, BytesPeekExt, CheckedAddWire},
+    codec::{
+        bytes::{
+            string::{ByteStringFieldExt, ByteStringFieldPolicy},
+            BytesMut, BytesMutPutExt, BytesMutTakeExt, BytesPeekExt,
+        },
+        wired::define_fields,
+        Decoder, Encoder,
+    },
     errors::WireError,
+    helpers::CheckedAddWire,
     DecodeFromFrame, EncodeIntoFrame,
 };
 
@@ -29,7 +32,7 @@ impl Default for AuthPayloadCodec {
     }
 }
 
-// [u64 timestamp] | [u128 nonce] | [mac] | [u8 length][client_id...]|
+// [u64 timestamp] | [u128 nonce] | [mac] | [u8 length][client_id...]
 define_fields! {
     (Timestamp, u64, fixed),
     (Nonce, u128, fixed),

@@ -1840,7 +1840,6 @@ dependencies = [
  "sha2",
  "subtle",
  "thiserror 2.0.17",
- "tokio-util",
  "tracing",
  "zwire",
 ]

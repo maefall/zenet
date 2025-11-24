@@ -1,6 +1,7 @@
-use super::super::errors::{MalformedStringError, MalformedStringKind};
 pub use bytestr::ByteStr;
-use tokio_util::bytes::Bytes;
+
+use crate::errors::{MalformedStringError, MalformedStringKind};
+use super::Bytes;
 
 pub enum ByteStringFieldPolicy {
     Utf8,

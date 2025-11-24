@@ -1,5 +1,5 @@
 use crate::{
-    codec::{WiredFixedBytes, WiredInt, WiredIntField, WiredLengthPrefixed},
+    codec::wired::{WiredFixedBytes, WiredInt, WiredIntField, WiredLengthPrefixed},
     WireError,
 };
 use tokio_util::bytes::{BufMut, Bytes, BytesMut};

@@ -5,8 +5,7 @@ pub use mac::auth_mac;
 use secrecy::ExposeSecret;
 use std::time::{SystemTime, UNIX_EPOCH};
 use subtle::ConstantTimeEq;
-use tokio_util::bytes::Bytes;
-use zwire::{Frame, Message};
+use zwire::{codec::bytes::Bytes, Frame, Message};
 
 const DUMMY_KEY: [u8; 32] = [0u8; 32];
 

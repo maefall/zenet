@@ -84,7 +84,6 @@ impl_wired_int_for!(u32);
 impl_wired_int_for!(u64);
 impl_wired_int_for!(u128);
 
-
 pub trait WiredIntField {
     type Int: WiredInt;
 

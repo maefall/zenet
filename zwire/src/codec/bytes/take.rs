@@ -1,5 +1,5 @@
-use super::{CheckedAddWire, WiredFixedBytes, WiredInt, WiredIntField, WiredLengthPrefixed};
-use crate::errors::WireError;
+use super::super::wired::{WiredFixedBytes, WiredInt, WiredIntField, WiredLengthPrefixed};
+use crate::{errors::WireError, helpers::CheckedAddWire};
 use tokio_util::bytes::{Buf, Bytes, BytesMut};
 
 pub trait BytesMutTakeExt {
