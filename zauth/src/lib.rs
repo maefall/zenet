@@ -11,7 +11,7 @@ use zwire::codec::bytestring::ByteStr;
 use hmac::digest::InvalidLength;
 use rand::RngCore;
 use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
-use tokio_util::bytes::{Bytes, BytesMut};
+use tokio_util::bytes::{Bytes, BytesMut, Buf};
 
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
 pub enum ZauthError {
@@ -28,7 +28,7 @@ pub enum ZauthError {
 pub struct AuthPayload {
     pub client_identifier: ByteStr,
     pub timestamp: u64,
-    pub nonce: Bytes,
+    pub nonce: u128,
     pub mac: Bytes,
 }
 
@@ -40,8 +40,8 @@ impl AuthPayload {
 
         rand::rng().fill_bytes(&mut nonce_buffer);
 
-        let nonce = nonce_buffer.freeze();
-        let mac = auth_mac(key.as_bytes(), &client_identifier, timestamp, &nonce)?;
+        let nonce = nonce_buffer.freeze().get_u128();
+        let mac = auth_mac(key.as_bytes(), &client_identifier, timestamp, nonce)?;
 
         Ok(AuthPayload {
             client_identifier,

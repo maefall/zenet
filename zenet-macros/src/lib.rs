@@ -7,8 +7,20 @@ use syn::{
     parse_macro_input, Ident, LitInt, Token, Type,
 };
 
+enum FieldKind {
+    LengthPrefix,
+    Fixed,
+}
+
+struct FieldDef {
+    name: Ident,
+    ty: Type,
+    offset: usize,
+    _kind: FieldKind,
+}
+
 struct DefineFieldsInput {
-    fields: Vec<(Ident, Type, usize)>,
+    fields: Vec<FieldDef>,
 }
 
 impl Parse for DefineFieldsInput {
@@ -22,16 +34,39 @@ impl Parse for DefineFieldsInput {
             let name: Ident = content.parse()?;
             content.parse::<Token![,]>()?;
 
-            let prim_ty: Type = content.parse()?;
+            let ty: Type = content.parse()?;
             content.parse::<Token![,]>()?;
 
             let offset_lit: LitInt = content.parse()?;
+            content.parse::<Token![,]>()?;
+
             let offset: usize = offset_lit.base10_parse()?;
 
-            fields.push((name, prim_ty, offset));
+            let kind_ident: Ident = content.parse()?;
+            let _kind = match kind_ident.to_string().as_str() {
+                "fixed" => FieldKind::Fixed,
+                "length_prefix" => FieldKind::LengthPrefix,
+                other => {
+                    return Err(syn::Error::new(
+                        kind_ident.span(),
+                        format!(
+                            "unknown field kind `{}` (expected `fixed` or `length_prefix`)",
+                            other
+                        ),
+                    ));
+                }
+            };
+
+            fields.push(FieldDef {
+                name,
+                ty,
+                offset,
+                _kind,
+            });
 
             let _ = input.parse::<Token![,]>();
         }
+
         Ok(DefineFieldsInput { fields })
     }
 }
@@ -40,40 +75,42 @@ impl Parse for DefineFieldsInput {
 pub fn define_fields(input: TokenStream) -> TokenStream {
     let DefineFieldsInput { fields } = parse_macro_input!(input as DefineFieldsInput);
 
-    let type_definitions = fields.iter().map(|(name, primitive_type, _)| {
-        let length_prefix_ident = Ident::new(&format!("{}LengthPrefix", name), name.span());
+    let wired_type_defs = fields.iter().map(|field| {
+        let name = &field.name;
+        let ty = &field.ty;
+        let length_prefix_ident = Ident::new(&format!("{}Wired", name), name.span());
 
         quote! {
-            pub type #length_prefix_ident = #primitive_type;
+            pub type #length_prefix_ident = #ty;
         }
     });
 
-    let offset_consts = fields.iter().filter_map(|(name, _, offset)| {
-        if *offset > 0 {
-            let upper_ident = Ident::new(
-                &format!("{}_FIELD_OFFSET", name.to_string().to_uppercase()),
-                name.span(),
-            );
-            Some(quote! {
-                pub const #upper_ident: usize = #offset;
-            })
-        } else {
-            None
+    let offset_consts = fields.iter().map(|field| {
+        let upper_ident = Ident::new(
+            &format!("{}_FIELD_OFFSET", field.name.to_string().to_uppercase()),
+            field.name.span(),
+        );
+
+        let offset = field.offset;
+
+        quote! {
+            pub const #upper_ident: usize = #offset;
         }
     });
 
-    let header_length_terms = fields.iter().map(|(name, _, _)| {
-        let length_prefix_ident = Ident::new(&(name.to_string() + "LengthPrefix"), name.span());
+    let header_length_terms = fields.iter().map(|field| {
+        let name = &field.name;
+        let length_prefix_ident = Ident::new(&(name.to_string() + "Wired"), name.span());
 
-        quote! { <#length_prefix_ident>::WIDTH }
+        quote! { <#length_prefix_ident as crate::codec::WiredInt>::SIZE }
     });
 
     let expanded = quote! {
-        #(#type_definitions)*
+        #(#wired_type_defs)*
 
         #(#offset_consts)*
 
-        pub const HEADER_LENGTH: usize = 0 #( + #header_length_terms )* ;
+        pub const FIXED_PART_LENGTH: usize = 0 #( + #header_length_terms )* ;
     };
 
     TokenStream::from(expanded)

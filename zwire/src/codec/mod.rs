@@ -9,8 +9,8 @@ pub use take::BytesMutTakeExt;
 mod put;
 pub use put::BytesMutPutExt;
 
-mod length_prefix;
-pub use length_prefix::LengthPrefix;
+mod wired_int;
+pub use wired_int::WiredInt;
 
 mod checked_add;
 pub use checked_add::CheckedAddWire;
@@ -24,8 +24,8 @@ use tokio_util::{
 };
 
 define_fields! {
-  (Message, u8, 0),
-  (Payload, u16, 1),
+    (Message, u8, 0, fixed),
+    (Payload, u16, 1, length_prefix),
 }
 
 #[derive(Clone, Copy)]
@@ -41,7 +41,7 @@ impl Default for FrameCodec {
         let max_payload_length = usize::MAX;
 
         FrameCodec {
-            max_length: DEFAULT_MAX_PAYLOAD_LENGTH - HEADER_LENGTH,
+            max_length: DEFAULT_MAX_PAYLOAD_LENGTH - FIXED_PART_LENGTH,
             max_payload_length,
         }
     }
@@ -69,14 +69,11 @@ impl Encoder<Frame> for FrameCodec {
             ));
         }
 
-        let total_length =
-            HEADER_LENGTH
-                .checked_add(payload_length)
-                .ok_or(WireError::Oversized(
-                    "total_length",
-                    payload_length,
-                    self.max_length,
-                ))?;
+        let total_length = FIXED_PART_LENGTH.checked_add_wire(
+            "FIXED_PART_LENGTH",
+            payload_length,
+            "payload_length",
+        )?;
 
         if total_length > self.max_length {
             return Err(WireError::Oversized(
@@ -88,8 +85,8 @@ impl Encoder<Frame> for FrameCodec {
 
         destination.reserve(total_length);
 
-        destination.put_single::<MessageLengthPrefix>(frame.message_type as MessageLengthPrefix); // repr
-        destination.put_length_prefixed::<PayloadLengthPrefix>(
+        destination.put_single::<MessageWired>(frame.message_type as MessageWired); // repr
+        destination.put_length_prefixed::<PayloadWired>(
             &frame.payload,
             "payload_length",
             Some(PAYLOAD_FIELD_OFFSET),
@@ -109,7 +106,7 @@ impl Decoder for FrameCodec {
         }
 
         let Some(payload_length) = source
-            .peek_at::<PayloadLengthPrefix>(PAYLOAD_FIELD_OFFSET)
+            .peek_at::<PayloadWired>(PAYLOAD_FIELD_OFFSET, "payload_length")?
             .get()
         else {
             return Ok(None);
@@ -123,8 +120,11 @@ impl Decoder for FrameCodec {
             ));
         }
 
-        let total_length =
-            HEADER_LENGTH.checked_add_wire(payload_length, "header_length", "payload_length")?;
+        let total_length = FIXED_PART_LENGTH.checked_add_wire(
+            "FIXED_PART_LENGTH",
+            payload_length,
+            "payload_length",
+        )?;
 
         if source.len() < total_length {
             return Ok(None);
@@ -132,8 +132,8 @@ impl Decoder for FrameCodec {
 
         let message_type = Message::try_from(source.get_u8())?;
 
-        if let Some(payload) = source
-            .take_length_prefixed::<PayloadLengthPrefix>(self.max_length, "payload")?
+        if let Some(payload) =
+            source.take_length_prefixed::<PayloadWired>(self.max_length, "payload")?
         {
             Ok(Some(Frame {
                 message_type,

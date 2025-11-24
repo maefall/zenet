@@ -1,14 +1,15 @@
-use super::length_prefix::LengthPrefix;
+use super::WiredInt;
+use crate::WireError;
 use std::marker::PhantomData;
 use tokio_util::bytes::BytesMut;
 
-pub struct PeekLength<T: LengthPrefix> {
+pub struct PeekLength<I: WiredInt> {
     ready: bool,
     length: usize,
-    _phantom: PhantomData<T>,
+    _phantom: PhantomData<I>,
 }
 
-impl<T: LengthPrefix> PeekLength<T> {
+impl<I: WiredInt> PeekLength<I> {
     #[inline]
     pub fn is_ready(&self) -> bool {
         self.ready
@@ -21,17 +22,13 @@ impl<T: LengthPrefix> PeekLength<T> {
 
     #[inline]
     pub fn get_total(&self) -> Option<usize> {
-        let header_length = T::WIDTH;
-
-        self.checked_add(header_length)
+        self.checked_add(I::SIZE)
     }
 
     #[inline]
     pub fn get_total_seperated(&self) -> Option<(usize, usize)> {
         if let Some(length) = self.get() {
-            let header_length = T::WIDTH;
-
-            return Some((length, header_length));
+            return Some((length, I::SIZE));
         }
 
         None
@@ -50,28 +47,35 @@ impl<T: LengthPrefix> PeekLength<T> {
 }
 
 pub trait BytesPeekExt {
-    fn peek_at<T: LengthPrefix>(&self, offset: usize) -> PeekLength<T>;
+    fn peek_at<I: WiredInt>(
+        &self,
+        offset: usize,
+        field_name: &'static str,
+    ) -> Result<PeekLength<I>, WireError>;
 }
 
 impl BytesPeekExt for BytesMut {
-    #[inline]
-    fn peek_at<T: LengthPrefix>(&self, start_offset: usize) -> PeekLength<T> {
+    fn peek_at<I: WiredInt>(
+        &self,
+        start_offset: usize,
+        field_name: &'static str,
+    ) -> Result<PeekLength<I>, WireError> {
         const DEFAULT_LENGTH: usize = 0;
 
-        let width = T::WIDTH;
-        let end_offset = start_offset.saturating_add(width);
+        let size = I::SIZE;
+        let end_offset = start_offset.saturating_add(size);
 
-        if self.len() < start_offset.saturating_add(width) {
-            return PeekLength {
+        if self.len() < end_offset {
+            return Ok(PeekLength {
                 ready: false,
                 length: DEFAULT_LENGTH,
                 _phantom: PhantomData,
-            };
+            });
         }
 
         let prefix = &self[start_offset..end_offset];
 
-        match T::read(prefix) {
+        Ok(match I::read(prefix, field_name)? {
             Some(length) => PeekLength {
                 ready: true,
                 length,
@@ -82,6 +86,6 @@ impl BytesPeekExt for BytesMut {
                 length: DEFAULT_LENGTH,
                 _phantom: PhantomData,
             },
-        }
+        })
     }
 }

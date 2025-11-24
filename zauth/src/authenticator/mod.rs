@@ -60,7 +60,7 @@ impl<S: AuthStore> Authenticator<S> {
             key_bytes,
             &auth.client_identifier,
             auth.timestamp,
-            &auth.nonce,
+            auth.nonce,
         ) {
             Ok(mac) => mac,
             Err(_) => return false,
@@ -75,7 +75,7 @@ impl<S: AuthStore> Authenticator<S> {
         if key_guard.is_some() {
             let is_nonce_new = match self.store.insert_nonce(
                 &auth.client_identifier,
-                auth.nonce.clone(),
+                auth.nonce,
                 auth.timestamp,
                 std::time::Duration::from_secs(self.skew_seconds),
             ) {

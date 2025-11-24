@@ -1,10 +1,9 @@
-use super::length_prefix::LengthPrefix;
-use crate::WireError;
+use crate::{codec::WiredInt, WireError};
 use tokio_util::bytes::{BufMut, Bytes, BytesMut};
 
 pub trait BytesMutPutExt {
-    fn put_single<T: LengthPrefix>(&mut self, value: T::Int);
-    fn put_length_prefixed<T: LengthPrefix>(
+    fn put_single<I: WiredInt>(&mut self, value: I::Int);
+    fn put_length_prefixed<I: WiredInt>(
         &mut self,
         payload: &Bytes,
         payload_field_name: &'static str,
@@ -47,7 +46,7 @@ impl BytesMutPutExt for BytesMut {
 
             self[offset..required_length].copy_from_slice(payload);
 
-            return Ok(());
+            Ok(())
         } else {
             self.extend_from_slice(payload);
 
@@ -56,13 +55,13 @@ impl BytesMutPutExt for BytesMut {
     }
 
     #[inline]
-    fn put_single<T: LengthPrefix>(&mut self, value: T::Int) {
-        let bytes = T::to_bytes(value);
+    fn put_single<I: WiredInt>(&mut self, value: I::Int) {
+        let bytes = I::to_bytes(value);
 
         self.put_slice(bytes.as_ref());
     }
 
-    fn put_length_prefixed<T: LengthPrefix>(
+    fn put_length_prefixed<I: WiredInt>(
         &mut self,
         payload: &Bytes,
         payload_field_name: &'static str,
@@ -70,19 +69,19 @@ impl BytesMutPutExt for BytesMut {
     ) -> Result<(), WireError> {
         let payload_length = payload.len();
 
-        if payload_length > T::MAX {
+        if payload_length > I::MAX {
             return Err(WireError::Oversized(
                 payload_field_name,
                 payload_length,
-                T::MAX,
+                I::MAX,
             ));
         }
 
-        let payload_length_bytes = T::to_bytes_from_usize(payload_length);
+        let payload_length_bytes = I::to_bytes_from_usize(payload_length);
         let payload_length_bytes_slice = payload_length_bytes.as_ref();
 
         if let Some(offset) = offset {
-            let header_length = offset + T::WIDTH;
+            let header_length = offset + I::SIZE;
             let total_length = header_length + payload_length;
 
             if self.len() < total_length {
