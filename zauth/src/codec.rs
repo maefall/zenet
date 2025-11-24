@@ -124,7 +124,6 @@ impl Decoder for AuthPayloadCodec {
 
         let client_identifier = client_identifier_bytes.to_bytestr_field(
             "client_identifier",
-            None,
             ByteStringFieldPolicy::AsciiHyphen,
         )?;
 
