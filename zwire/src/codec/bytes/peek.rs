@@ -1,5 +1,5 @@
 use super::super::wired::{WiredIntInner, WiredLengthPrefixed};
-use crate::WireError;
+use crate::{helpers::CheckedAddWire, WireError};
 use std::marker::PhantomData;
 use tokio_util::bytes::BytesMut;
 
@@ -50,7 +50,7 @@ impl BytesPeekExt for BytesMut {
         const DEFAULT_LENGTH: usize = 0;
 
         let size = I::Inner::SIZE;
-        let end_offset = start_offset.saturating_add(size);
+        let end_offset = start_offset.checked_add_wire("OFFSET", size, "LENGTH_HEADER_SIZE")?;
 
         if self.len() < end_offset {
             return Ok(PeekLength {
