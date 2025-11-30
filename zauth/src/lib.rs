@@ -14,7 +14,7 @@ use authenticator::auth_mac;
 use hmac::digest::InvalidLength;
 use rand::Rng;
 use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
-use zwire::codec::bytes::{string::ByteStr, Bytes};
+use zwire::codec::bytes::{ByteStr, Bytes};
 
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
 pub enum ZauthError {

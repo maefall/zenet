@@ -1,7 +1,7 @@
 use crate::ZauthError;
 use hmac::{digest::FixedOutput, Hmac, Mac};
 use sha2::Sha256;
-use zwire::codec::bytes::{string::ByteStr, Bytes};
+use zwire::codec::bytes::{ByteStr, Bytes};
 
 type HmacSha256 = Hmac<Sha256>;
 

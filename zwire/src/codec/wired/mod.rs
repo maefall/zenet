@@ -1,10 +1,17 @@
 mod fixed_bytes;
 mod int;
 mod length_prefixed;
+mod string;
 
 pub use self::{
     fixed_bytes::WiredFixedBytes,
-    int::{WiredInt, WiredIntInner},
+    int::WiredInt,
     length_prefixed::WiredLengthPrefixed,
+    string::{WiredString, WiredStringPolicyKind},
 };
 pub use zenet_macros::define_fields;
+
+pub trait WiredField {
+    const FIELD_NAME: &'static str;
+    const OFFSET: usize;
+}

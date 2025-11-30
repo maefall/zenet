@@ -1,10 +1,7 @@
 use crate::AuthPayload;
 use zwire::{
     codec::{
-        bytes::{
-            string::{ByteStringFieldExt, ByteStringFieldPolicy},
-            BytesMut, BytesMutPutExt, BytesMutTakeExt, BytesPeekExt,
-        },
+        bytes::{BytesMut, BytesMutPutExt, BytesMutTakeExt, BytesPeekExt},
         wired::define_fields,
         Decoder, Encoder,
     },
@@ -37,7 +34,7 @@ define_fields! {
     (Timestamp, u64, fixed),
     (Nonce, u128, fixed),
     (Mac, 32, fixed),
-    (ClientIdentifier, u8, length_prefix, 255),
+    (ClientIdentifier, u8, length_prefix_string, 255, AsciiHyphen),
 }
 
 impl Encoder<AuthPayload> for AuthPayloadCodec {
@@ -77,7 +74,9 @@ impl Encoder<AuthPayload> for AuthPayloadCodec {
         destination.put_single::<fields::timestamp::Wired>(auth_payload.timestamp);
         destination.put_single::<fields::nonce::Wired>(auth_payload.nonce);
         destination.put_fixed_bytes::<fields::mac::Wired>(&auth_payload.mac)?;
-        destination.put_length_prefixed::<fields::clientidentifier::Wired>(client_id_bytes)?;
+        destination.put_length_prefixed_string::<fields::clientidentifier::Wired>(
+            auth_payload.client_identifier,
+        )?;
 
         Ok(())
     }
@@ -88,12 +87,7 @@ impl Decoder for AuthPayloadCodec {
     type Error = WireError;
 
     fn decode(&mut self, source: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let Some(client_id_length) = source
-            .peek_at::<fields::clientidentifier::Wired>(
-                fields::clientidentifier::OFFSET,
-                "client_identifier_length",
-            )?
-            .get()
+        let Some(client_id_length) = source.peek_at::<fields::clientidentifier::Wired>()?.get()
         else {
             return Ok(None);
         };
@@ -119,14 +113,8 @@ impl Decoder for AuthPayloadCodec {
         let timestamp = source.take_single_unchecked::<fields::timestamp::Wired>();
         let nonce = source.take_single_unchecked::<fields::nonce::Wired>();
         let mac = source.take_fixed_bytes_unchecked::<fields::mac::Wired>();
-        let client_identifier_bytes =
-            source.take_length_prefixed_unchecked::<fields::clientidentifier::Wired>()?;
-
-        let client_identifier = client_identifier_bytes.to_bytestr_field(
-            "client_identifier",
-            None,
-            ByteStringFieldPolicy::AsciiHyphen,
-        )?;
+        let client_identifier =
+            source.take_length_prefixed_string_unchecked::<fields::clientidentifier::Wired>()?;
 
         Ok(Some(AuthPayload {
             client_identifier,

@@ -1,4 +1,4 @@
-use super::super::wired::{WiredIntInner, WiredLengthPrefixed};
+use super::super::wired::{WiredInt, WiredLengthPrefixed};
 use crate::{helpers::CheckedAddWire, WireError};
 use std::marker::PhantomData;
 use tokio_util::bytes::BytesMut;
@@ -15,10 +15,6 @@ impl<I: WiredLengthPrefixed> PeekLength<I> {
         self.ready
     }
 
-    pub fn header_size(&self) -> usize {
-        I::Inner::SIZE
-    }
-
     #[inline]
     pub fn get(&self) -> Option<usize> {
         self.ready.then_some(self.length)
@@ -27,30 +23,22 @@ impl<I: WiredLengthPrefixed> PeekLength<I> {
     #[inline]
     pub fn get_with_header(&self) -> Option<usize> {
         let length = self.get()?;
-        let header_size = self.header_size();
 
-        length.checked_add(header_size)
+        length.checked_add(I::LengthPrefix::SIZE)
     }
 }
 
 pub trait BytesPeekExt {
-    fn peek_at<I: WiredLengthPrefixed>(
-        &self,
-        offset: usize,
-        field_name: &'static str,
-    ) -> Result<PeekLength<I>, WireError>;
+    fn peek_at<I: WiredLengthPrefixed>(&self) -> Result<PeekLength<I>, WireError>;
 }
 
 impl BytesPeekExt for BytesMut {
-    fn peek_at<I: WiredLengthPrefixed>(
-        &self,
-        start_offset: usize,
-        field_name: &'static str,
-    ) -> Result<PeekLength<I>, WireError> {
+    fn peek_at<I: WiredLengthPrefixed>(&self) -> Result<PeekLength<I>, WireError> {
         const DEFAULT_LENGTH: usize = 0;
 
-        let size = I::Inner::SIZE;
-        let end_offset = start_offset.checked_add_wire("OFFSET", size, "LENGTH_HEADER_SIZE")?;
+        let start_offset = I::OFFSET;
+        let end_offset =
+            start_offset.checked_add_wire("OFFSET", I::LengthPrefix::SIZE, "LENGTH_HEADER_SIZE")?;
 
         if self.len() < end_offset {
             return Ok(PeekLength {
@@ -62,7 +50,7 @@ impl BytesPeekExt for BytesMut {
 
         let prefix = &self[start_offset..end_offset];
 
-        Ok(match I::Inner::read(prefix, field_name)? {
+        Ok(match I::LengthPrefix::read(prefix, I::FIELD_NAME)? {
             Some(length) => PeekLength {
                 ready: true,
                 length,

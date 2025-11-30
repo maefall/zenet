@@ -1,8 +1,7 @@
-use super::WiredIntInner;
+use super::{WiredInt, WiredField};
 
-pub trait WiredLengthPrefixed {
-    type Inner: WiredIntInner;
+pub trait WiredLengthPrefixed: WiredField {
+    type LengthPrefix: WiredInt;
 
-    const FIELD_NAME: &'static str;
     const MAX_LENGTH: usize;
 }
