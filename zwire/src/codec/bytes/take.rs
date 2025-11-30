@@ -17,8 +17,12 @@ pub trait BytesMutTakeExt {
         &mut self,
     ) -> Result<Bytes, WireError>;
     fn take_length_prefixed<I: WiredLengthPrefixed>(&mut self) -> Result<Option<Bytes>, WireError>;
+
     fn take_length_prefixed_string<I: WiredString>(&mut self)
         -> Result<Option<ByteStr>, WireError>;
+    fn take_length_prefixed_string_unchecked<I: WiredString>(
+        &mut self,
+    ) -> Result<ByteStr, WireError>;
 }
 
 impl BytesMutTakeExt for BytesMut {
@@ -117,6 +121,25 @@ impl BytesMutTakeExt for BytesMut {
         let bytes = self.split_to(expected_payload_length).freeze();
 
         Ok(Some(bytes))
+    }
+
+    fn take_length_prefixed_string_unchecked<I: WiredString>(
+        &mut self,
+    ) -> Result<ByteStr, WireError> {
+        let payload = self.take_length_prefixed_unchecked::<I::Inner>()?;
+
+        let byte_string = ByteStr::from_utf8(payload).map_err(|error| MalformedStringError {
+            field: Some(I::FIELD_NAME),
+            kind: MalformedStringKind::InvalidUtf8(error),
+        })?;
+
+        if let Err(mut error) = I::POLICY.validate(&byte_string) {
+            error.field = Some(I::FIELD_NAME);
+
+            return Err(WireError::MalformedString(error));
+        };
+
+        Ok(byte_string)
     }
 
     fn take_length_prefixed_string<I: WiredString>(
