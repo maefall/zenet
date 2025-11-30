@@ -145,7 +145,7 @@ impl BytesMutTakeExt for BytesMut {
     fn take_length_prefixed_string<I: WiredString>(
         &mut self,
     ) -> Result<Option<ByteStr>, WireError> {
-        let Ok(Some(payload)) = self.take_length_prefixed::<I::Inner>() else {
+        let Some(payload) = self.take_length_prefixed::<I::Inner>()? else {
             return Ok(None);
         };
 
