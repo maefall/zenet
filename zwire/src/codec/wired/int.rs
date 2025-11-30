@@ -79,7 +79,7 @@ macro_rules! impl_read_unchecked {
 
 macro_rules! impl_wired_int_for {
     ($ty:ty) => {
-        impl WiredIntInner for $ty {
+        impl WiredInt for $ty {
             type Int = $ty;
 
             impl_max_and_byte_array!();
@@ -102,14 +102,8 @@ impl_wired_int_for!(u64);
 impl_wired_int_for!(u128);
 
 pub trait WiredInt {
-    type Inner: WiredIntInner;
-
-    const FIELD_NAME: &'static str;
-}
-
-pub trait WiredIntInner: Sized {
-    type Int: Copy;
-    type ByteArray: AsRef<[u8]> + AsMut<[u8]> + Sized;
+    type Int;
+    type ByteArray: AsRef<[u8]> + AsMut<[u8]>;
 
     const SIZE: usize = std::mem::size_of::<Self::Int>();
     const MAX: usize;

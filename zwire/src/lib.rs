@@ -1,6 +1,6 @@
-pub mod helpers;
 pub mod codec;
 pub mod errors;
+pub mod helpers;
 
 pub use codec::{
     bytes::{Bytes, BytesMut},
@@ -9,7 +9,10 @@ pub use codec::{
 use errors::WireError;
 
 pub mod __zwire_macros_support {
-    pub use crate::codec::wired::{WiredFixedBytes, WiredInt, WiredIntInner, WiredLengthPrefixed};
+    pub use crate::{
+        codec::wired::{WiredField, WiredFixedBytes, WiredInt, WiredLengthPrefixed, WiredString, WiredStringPolicyKind},
+        errors::WireError,
+    };
     pub use tokio_util::bytes::Bytes;
 }
 

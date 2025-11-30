@@ -1,10 +1,9 @@
-use super::super::bytes::Bytes;
+use super::{super::bytes::Bytes, WiredField};
 
-pub trait WiredFixedBytes {
-    const SIZE: usize;
-    const FIELD_NAME: &'static str;
-
+pub trait WiredFixedBytes: WiredField {
     type Output;
+
+    const LENGTH: usize;
 
     fn from_bytes(bytes: Bytes) -> Self::Output;
 }

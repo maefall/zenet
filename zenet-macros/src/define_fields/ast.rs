@@ -4,10 +4,11 @@ use syn::{
     Ident, LitInt, Token, Type,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum FieldKind {
     LengthPrefix,
     Fixed,
+    LengthPrefixString { policy_variant: Ident },
 }
 
 pub struct FieldDef {
@@ -27,7 +28,6 @@ fn parse_type_or_len_as_type(input: ParseStream) -> syn::Result<Type> {
     if input.peek(LitInt) {
         let lit: LitInt = input.parse()?;
         let ty: Type = syn::parse_quote! { [u8; #lit] };
-
         Ok(ty)
     } else {
         input.parse()
@@ -45,23 +45,16 @@ impl Parse for DefineFieldsInput {
             let name: Ident = content.parse()?;
             content.parse::<Token![,]>()?;
 
-            // Type or integer (N -> [u8; N])
             let ty: Type = parse_type_or_len_as_type(&content)?;
             content.parse::<Token![,]>()?;
 
-            // (Name, Type, <offset>, kind)
-            // (Name, Type, kind)
-            //
-            // For length_prefix:
-            //   (Name, Type, length_prefix, <max_length>)
-            //   (Name, Type, <offset>, length_prefix, <max_length>)
             let lookahead = content.lookahead1();
-
             let mut offset_opt: Option<usize> = None;
             let kind_ident: Ident;
 
             if lookahead.peek(LitInt) {
                 let offset_lit: LitInt = content.parse()?;
+
                 offset_opt = Some(offset_lit.base10_parse()?);
                 content.parse::<Token![,]>()?;
                 kind_ident = content.parse()?;
@@ -69,23 +62,49 @@ impl Parse for DefineFieldsInput {
                 kind_ident = content.parse()?;
             }
 
-            let kind = match kind_ident.to_string().as_str() {
+            let kind_string = kind_ident.to_string();
+
+            let kind: FieldKind = match kind_string.as_str() {
                 "fixed" => FieldKind::Fixed,
                 "length_prefix" => FieldKind::LengthPrefix,
+                "length_prefix_string" => {
+                    if !content.peek(Token![,]) {
+                        return Err(syn::Error::new(
+                            kind_ident.span(),
+                            "length_prefix_string requires: <max_length>, <policy_variant>",
+                        ));
+                    }
+
+                    content.parse::<Token![,]>()?;
+                    let max_len_lit: LitInt = content.parse()?;
+                    let max_length_val = max_len_lit.base10_parse::<usize>()?;
+
+                    content.parse::<Token![,]>()?;
+                    let policy_variant: Ident = content.parse()?;
+
+                    parsed_fields.push((
+                        name,
+                        ty,
+                        offset_opt,
+                        FieldKind::LengthPrefixString { policy_variant },
+                        Some(max_length_val),
+                    ));
+
+                    let _ = input.parse::<Token![,]>();
+
+                    continue;
+                }
                 other => {
                     return Err(syn::Error::new(
                         kind_ident.span(),
                         format!(
-                            "unknown field kind `{}` (expected `fixed` or `length_prefix`)",
+                            "unknown field kind `{}` (expected `fixed`, `length_prefix`, or `length_prefix_string`)",
                             other
                         ),
                     ));
                 }
             };
 
-            // max_length:
-            // - REQUIRED for length_prefix
-            // - FORBIDDEN for fixed
             let mut max_length: Option<usize> = None;
 
             match kind {
@@ -93,32 +112,32 @@ impl Parse for DefineFieldsInput {
                     if !content.peek(Token![,]) {
                         return Err(syn::Error::new(
                             kind_ident.span(),
-                            "length_prefix fields require a max length: \
-                             (Name, Type, length_prefix, <max_length>) or \
-                             (Name, Type, <offset>, length_prefix, <max_length>)",
+                            "length_prefix requires: <max_length>",
                         ));
                     }
+
                     content.parse::<Token![,]>()?;
                     let lit: LitInt = content.parse()?;
+
                     max_length = Some(lit.base10_parse()?);
                 }
                 FieldKind::Fixed => {
                     if content.peek(Token![,]) {
                         return Err(syn::Error::new(
                             content.span(),
-                            "unexpected extra argument after `fixed` \
-                             (max length is only valid for `length_prefix` fields)",
+                            "unexpected extra argument after `fixed`",
                         ));
                     }
+                }
+                FieldKind::LengthPrefixString { .. } => {
+                    unreachable!("handled earlier");
                 }
             }
 
             parsed_fields.push((name, ty, offset_opt, kind, max_length));
-
             let _ = input.parse::<Token![,]>();
         }
 
-        // Resolve offsets
         let mut current_offset: usize = 0;
         let mut fields = Vec::with_capacity(parsed_fields.len());
 
@@ -126,8 +145,7 @@ impl Parse for DefineFieldsInput {
             let size = known_type_size(&ty).ok_or_else(|| {
                 syn::Error::new(
                     name.span(),
-                    "automatic offsets only support u8/u16/u32/u64/u128 and [u8; N]; \
-                     for other types, please supply an explicit offset",
+                    "automatic offsets only support u8/u16/u32/u64/u128 and [u8; N]; provide explicit offset",
                 )
             })?;
 
@@ -142,6 +160,25 @@ impl Parse for DefineFieldsInput {
                     auto
                 }
             };
+
+            match kind {
+                FieldKind::LengthPrefix | FieldKind::LengthPrefixString { .. } => {
+                    if max_length.is_none() {
+                        return Err(syn::Error::new(
+                            name.span(),
+                            "missing max_length for length-prefix variant",
+                        ));
+                    }
+                }
+                FieldKind::Fixed => {
+                    if max_length.is_some() {
+                        return Err(syn::Error::new(
+                            name.span(),
+                            "fixed field should not have max_length",
+                        ));
+                    }
+                }
+            }
 
             fields.push(FieldDef {
                 name,

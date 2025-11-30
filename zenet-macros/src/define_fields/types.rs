@@ -26,6 +26,7 @@ pub fn known_type_size(ty: &Type) -> Option<usize> {
 
 // Detect if the type is exactly [u8; N] and return N.
 pub fn is_u8_array_type(ty: &Type) -> Option<usize> {
+
     #[allow(clippy::collapsible_if)]
     if let Type::Array(TypeArray { elem, len, .. }) = ty {
         if let Type::Path(TypePath { path, qself: None }) = &**elem {

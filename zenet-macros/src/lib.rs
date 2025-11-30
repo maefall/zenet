@@ -1,5 +1,3 @@
-extern crate proc_macro;
-
 mod define_fields;
 use define_fields::{expand_define_fields, DefineFieldsInput};
 

@@ -80,10 +80,7 @@ impl Decoder for FrameCodec {
             return Ok(None);
         }
 
-        let Some(payload_length) = source
-            .peek_at::<fields::payload::Wired>(fields::payload::OFFSET, "payload_length")?
-            .get()
-        else {
+        let Some(payload_length) = source.peek_at::<fields::payload::Wired>()?.get() else {
             return Ok(None);
         };
 

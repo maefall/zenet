@@ -1,14 +1,14 @@
-use super::super::wired::{WiredFixedBytes, WiredInt, WiredIntInner, WiredLengthPrefixed};
-use crate::{errors::WireError, helpers::CheckedAddWire};
+use super::super::wired::{WiredFixedBytes, WiredInt, WiredLengthPrefixed, WiredString};
+use crate::{
+    codec::bytes::ByteStr,
+    errors::{MalformedStringError, MalformedStringKind, WireError},
+    helpers::CheckedAddWire,
+};
 use tokio_util::bytes::{Buf, Bytes, BytesMut};
 
 pub trait BytesMutTakeExt {
-    fn take_single<I: WiredInt>(
-        &mut self,
-    ) -> Option<<<I as WiredInt>::Inner as WiredIntInner>::Int>;
-    fn take_single_unchecked<I: WiredInt>(
-        &mut self,
-    ) -> <<I as WiredInt>::Inner as WiredIntInner>::Int;
+    fn take_single<I: WiredInt>(&mut self) -> Option<<I as WiredInt>::Int>;
+    fn take_single_unchecked<I: WiredInt>(&mut self) -> <I as WiredInt>::Int;
 
     fn take_fixed_bytes_unchecked<F: WiredFixedBytes>(&mut self) -> F::Output;
     fn take_fixed_bytes<F: WiredFixedBytes>(&mut self) -> Option<F::Output>;
@@ -17,15 +17,15 @@ pub trait BytesMutTakeExt {
         &mut self,
     ) -> Result<Bytes, WireError>;
     fn take_length_prefixed<I: WiredLengthPrefixed>(&mut self) -> Result<Option<Bytes>, WireError>;
+    fn take_length_prefixed_string<I: WiredString>(&mut self)
+        -> Result<Option<ByteStr>, WireError>;
 }
 
 impl BytesMutTakeExt for BytesMut {
     #[inline]
-    fn take_single_unchecked<I: WiredInt>(
-        &mut self,
-    ) -> <<I as WiredInt>::Inner as WiredIntInner>::Int {
-        let size = I::Inner::SIZE;
-        let value = I::Inner::read_raw_unchecked(&self[..size]);
+    fn take_single_unchecked<I: WiredInt>(&mut self) -> <I as WiredInt>::Int {
+        let size = I::SIZE;
+        let value = I::read_raw_unchecked(&self[..size]);
 
         self.advance(size);
 
@@ -33,11 +33,9 @@ impl BytesMutTakeExt for BytesMut {
     }
 
     #[inline]
-    fn take_single<I: WiredInt>(
-        &mut self,
-    ) -> Option<<<I as WiredInt>::Inner as WiredIntInner>::Int> {
-        let size = I::Inner::SIZE;
-        let value = I::Inner::read_raw(&self[..size])?;
+    fn take_single<I: WiredInt>(&mut self) -> Option<<I as WiredInt>::Int> {
+        let size = I::SIZE;
+        let value = I::read_raw(&self[..size])?;
 
         self.advance(size);
 
@@ -46,14 +44,14 @@ impl BytesMutTakeExt for BytesMut {
 
     #[inline]
     fn take_fixed_bytes_unchecked<F: WiredFixedBytes>(&mut self) -> F::Output {
-        let chunk: Bytes = self.split_to(F::SIZE).freeze();
+        let chunk: Bytes = self.split_to(F::LENGTH).freeze();
 
         F::from_bytes(chunk)
     }
 
     #[inline]
     fn take_fixed_bytes<F: WiredFixedBytes>(&mut self) -> Option<F::Output> {
-        if self.len() < F::SIZE {
+        if self.len() < F::LENGTH {
             return None;
         }
 
@@ -63,9 +61,11 @@ impl BytesMutTakeExt for BytesMut {
     fn take_length_prefixed_unchecked<I: WiredLengthPrefixed>(
         &mut self,
     ) -> Result<Bytes, WireError> {
-        let size = I::Inner::SIZE;
+        let size = I::LengthPrefix::SIZE;
         let max_payload_length = I::MAX_LENGTH;
-        let expected_payload_length = I::Inner::read_unchecked(&self[..size], "payload_length")?;
+        let expected_payload_length =
+            I::LengthPrefix::read_unchecked(&self[..size], "payload_length")?;
+
         if expected_payload_length > max_payload_length {
             return Err(WireError::Oversized(
                 I::FIELD_NAME,
@@ -82,14 +82,15 @@ impl BytesMutTakeExt for BytesMut {
     }
 
     fn take_length_prefixed<I: WiredLengthPrefixed>(&mut self) -> Result<Option<Bytes>, WireError> {
-        let size = I::Inner::SIZE;
+        let size = I::LengthPrefix::SIZE;
         let max_payload_length = I::MAX_LENGTH;
 
         if self.len() < size {
             return Ok(None);
         }
 
-        let Some(expected_payload_length) = I::Inner::read(&self[..size], "payload_length")? else {
+        let Some(expected_payload_length) = I::LengthPrefix::read(&self[..size], "payload_length")?
+        else {
             return Ok(None);
         };
 
@@ -116,5 +117,26 @@ impl BytesMutTakeExt for BytesMut {
         let bytes = self.split_to(expected_payload_length).freeze();
 
         Ok(Some(bytes))
+    }
+
+    fn take_length_prefixed_string<I: WiredString>(
+        &mut self,
+    ) -> Result<Option<ByteStr>, WireError> {
+        let Ok(Some(payload)) = self.take_length_prefixed::<I::Inner>() else {
+            return Ok(None);
+        };
+
+        let byte_string = ByteStr::from_utf8(payload).map_err(|error| MalformedStringError {
+            field: Some(I::FIELD_NAME),
+            kind: MalformedStringKind::InvalidUtf8(error),
+        })?;
+
+        if let Err(mut error) = I::POLICY.validate(&byte_string) {
+            error.field = Some(I::FIELD_NAME);
+
+            return Err(WireError::MalformedString(error));
+        };
+
+        Ok(Some(byte_string))
     }
 }
