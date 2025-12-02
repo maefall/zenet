@@ -14,7 +14,10 @@ use authenticator::auth_mac;
 use hmac::digest::InvalidLength;
 use rand::Rng;
 use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
-use zwire::codec::bytes::{ByteStr, Bytes};
+use zwire::codec::{
+    bytes::{ByteStr, Bytes},
+    wired::define_message,
+};
 
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
 pub enum ZauthError {
@@ -26,6 +29,15 @@ pub enum ZauthError {
     #[diagnostic(severity(Error))]
     UnsyncClock(#[from] SystemTimeError),
 }
+
+define_message!(
+    AuthMessage,
+    {
+        Auth = 1,
+        AuthValid = 2,
+        AuthInvalid = 3,
+    }
+);
 
 #[derive(Debug, Clone)]
 pub struct AuthPayload {
