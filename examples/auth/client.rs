@@ -1,6 +1,6 @@
 use super::{
-    certificate::load_or_generate_dev_certs, frame_codec, CLIENT_IDENTIFIER,
-    KEY, SERVER_ADDRESS, auth_payload_codec,
+    auth_payload_codec, certificate::load_or_generate_dev_certs, frame_codec, CLIENT_IDENTIFIER,
+    KEY, SERVER_ADDRESS,
 };
 use futures::TryStreamExt;
 use quinn::{ClientConfig, Endpoint};
@@ -13,10 +13,8 @@ use tokio_util::{
     codec::{Encoder, FramedRead},
 };
 use tracing::info;
-use zenet::{
-    zauth::{AuthPayload},
-    zwire::{EncodeIntoFrame, Message},
-};
+use zauth::AuthMessage;
+use zenet::{zauth::AuthPayload, zwire::EncodeIntoFrame};
 
 const CLIENT_ADDRESS: &str = "127.0.0.1:0";
 
@@ -49,7 +47,7 @@ async fn run_client(
         let mut framed_reader = FramedRead::new(recv, frame_codec());
 
         while let Ok(Some(frame)) = framed_reader.try_next().await {
-            info!("{:?}", frame.message);
+            info!("{:?}", AuthMessage::try_from(&frame.message).unwrap());
         }
     });
 
@@ -57,7 +55,11 @@ async fn run_client(
 
     loop {
         let auth_payload = AuthPayload::new(CLIENT_IDENTIFIER.into(), KEY).unwrap();
-        let frame = auth_payload_codec().encode_into_frame(auth_payload, Message::Auth, &mut codec_buffer)?;
+        let frame = auth_payload_codec().encode_into_frame(
+            auth_payload,
+            AuthMessage::Auth,
+            &mut codec_buffer,
+        )?;
 
         frame_codec().encode(frame, &mut codec_buffer).unwrap();
 
