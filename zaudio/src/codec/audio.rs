@@ -1,6 +1,10 @@
 use crate::AudioPayload;
 use zwire::{
-    codec::{bytes::BytesMut, wired::define_fields, Decoder, Encoder},
+    codec::{
+        bytes::{BytesMut, BytesMutPutExt, BytesMutTakeExt},
+        wired::define_fields,
+        Decoder, Encoder,
+    },
     errors::WireError,
     DecodeFromFrame, EncodeIntoFrame,
 };
@@ -11,22 +15,11 @@ impl EncodeIntoFrame for AudioPayloadCodec {
 
 impl DecodeFromFrame for AudioPayloadCodec {}
 
-#[derive(Clone, Copy)]
-pub struct AudioPayloadCodec {
-    max_length: usize,
-}
+#[derive(Clone, Copy, Default)]
+pub struct AudioPayloadCodec {}
 
-impl Default for AudioPayloadCodec {
-    fn default() -> Self {
-        Self {
-            max_length: fields::MAX_LENGTH,
-        }
-    }
-}
-
-// [u64 timestamp] | [u128 nonce] | [mac] | [u8 length][client_id...]
 define_fields! {
-    (Timestamp, u64, fixed),
+    (Audio, u16, length_prefix, 65535),
 }
 
 impl Encoder<AudioPayload> for AudioPayloadCodec {
@@ -37,7 +30,9 @@ impl Encoder<AudioPayload> for AudioPayloadCodec {
         audio_payload: AudioPayload,
         destination: &mut BytesMut,
     ) -> Result<(), Self::Error> {
-        todo!()
+        destination.put_length_prefixed::<fields::audio::Wired>(&audio_payload)?;
+
+        Ok(())
     }
 }
 
@@ -46,6 +41,8 @@ impl Decoder for AudioPayloadCodec {
     type Error = WireError;
 
     fn decode(&mut self, source: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        todo!()
+        let audio_payload = source.take_length_prefixed::<fields::audio::Wired>()?;
+
+        Ok(audio_payload)
     }
 }
