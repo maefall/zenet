@@ -64,7 +64,7 @@ impl Encoder<Frame> for FrameCodec {
 
         destination.reserve(total_length);
 
-        destination.put_single::<fields::message::Wired>(frame.message.into()); // repr
+        destination.put_single::<fields::message::Wired>(frame.message.0); // repr
         destination.put_length_prefixed::<fields::payload::Wired>(&frame.payload)?;
 
         Ok(())
@@ -111,10 +111,11 @@ impl Decoder for FrameCodec {
         }
 
         let message_code = source.take_single_unchecked::<fields::message::Wired>();
-        let message = Message::try_from(message_code)?;
-
         let payload = source.take_length_prefixed_unchecked::<fields::payload::Wired>()?;
 
-        Ok(Some(Frame { message, payload }))
+        Ok(Some(Frame {
+            message: Message(message_code),
+            payload,
+        }))
     }
 }

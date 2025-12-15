@@ -28,6 +28,8 @@ async fn handle_stream(mut send: SendStream, receive: RecvStream) -> Result<(), 
     let mut codec_buffer = BytesMut::new();
 
     while let Some(Ok(frame)) = framed_reader.next().await {
+        if let Some(auth_message) = 
+
         match AuthMessage::try_from(&frame.message)? {
             AuthMessage::Auth => {
                 if let Some((auth_payload, message)) =
