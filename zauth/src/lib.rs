@@ -1,6 +1,10 @@
 mod authenticator;
 mod codec;
+pub mod session;
 mod storage;
+
+#[cfg(feature = "integration")]
+pub mod integration;
 
 pub use authenticator::Authenticator;
 pub use codec::AuthPayloadCodec;
@@ -33,9 +37,10 @@ pub enum ZauthError {
 define_message!(
     AuthMessage,
     {
-        Auth = 1,
-        AuthValid = 2,
-        AuthInvalid = 3,
+        AuthRequired = 1,
+        Auth = 2,
+        AuthValid = 3,
+        AuthInvalid = 4,
     }
 );
 

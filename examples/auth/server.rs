@@ -1,20 +1,29 @@
-use super::{
-    auth_payload_codec, certificate::load_or_generate_dev_certs, frame_codec, AUTHENTICATOR,
-    SERVER_ADDRESS,
-};
-use futures::StreamExt;
-use quinn::{Endpoint, RecvStream, SendStream, ServerConfig};
-use std::{error::Error, net::SocketAddr};
-use tokio::io::AsyncWriteExt;
-use tokio_util::{
-    bytes::BytesMut,
-    codec::{Encoder, FramedRead},
-};
-use tracing::info;
-use zauth::AuthMessage;
-use zenet::zwire::DecodeFromFrame;
+use super::{certificate::load_or_generate_dev_certs, AUTHENTICATOR, SERVER_ADDRESS};
+use quinn::{Endpoint, ServerConfig};
+use std::net::SocketAddr;
+use std::sync::Arc;
 
-pub async fn run() -> Result<(), Box<dyn Error>> {
+use tracing::info;
+use zauth::integration::AcceptAuthed;
+
+/*
+CLIENT INITIATES:
+Server -> Client (bi): AuthRequired/AuthValid
+
+IF AUTH REQUIRED:
+Client -> Server (bi): Auth { auth payload }
+Server -> Client (bi): AuthValid/AuthInvalid
+
+IF AUTH VALID:
+Client -> Server (bi): RequestAudioTransmission { optional parameters }
+Server -> Client (bi): AwaitAudioTransmission { audio_metadata, uni stream stable_id }
+
+Server -> Client (uni): AudioPayload...
+*/
+
+use zwire::session::{SessionManager, SimpleSessionBackend};
+
+pub async fn run() -> anyhow::Result<()> {
     let (_, cert_der, key_der) = load_or_generate_dev_certs()?;
 
     let server_address: SocketAddr = SERVER_ADDRESS.parse()?;
@@ -23,53 +32,21 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     run_server(server_address, server_config).await
 }
 
-async fn handle_stream(mut send: SendStream, receive: RecvStream) -> Result<(), Box<dyn Error>> {
-    let mut framed_reader = FramedRead::new(receive, frame_codec());
-    let mut codec_buffer = BytesMut::new();
-
-    while let Some(Ok(frame)) = framed_reader.next().await {
-        match AuthMessage::try_from(&frame.message)? {
-            AuthMessage::Auth => {
-                if let Some((auth_payload, message)) =
-                    auth_payload_codec().decode_from_frame(frame, &mut codec_buffer)?
-                {
-                    tracing::info!("{:?}", AuthMessage::try_from(&message)?);
-
-                    let (_auth_status, response_frame) = AUTHENTICATOR.process_auth_payload(&auth_payload);
-
-                    frame_codec().encode(response_frame, &mut codec_buffer)?;
-
-                    send.write_all_buf(&mut codec_buffer).await?;
-                }
-            }
-            _ => todo!(),
-        }
-    }
-
-    Ok(())
-}
-
-async fn run_server(
-    server_address: SocketAddr,
-    server_config: ServerConfig,
-) -> Result<(), Box<dyn Error>> {
+async fn run_server(server_address: SocketAddr, server_config: ServerConfig) -> anyhow::Result<()> {
     let endpoint = Endpoint::server(server_config, server_address)?;
+    let session_manager = Arc::new(SessionManager::new(SimpleSessionBackend::new()));
 
     info!("Server listening on {}", server_address);
 
-    while let Some(connecting) = endpoint.accept().await {
+    while let Some(Ok(connection)) = endpoint
+        .accept_authed(session_manager.clone(), AUTHENTICATOR.clone())
+        .await
+    {
         tokio::spawn(async move {
-            if let Ok(connection) = connecting.await {
-                info!("Client [{}] connected", connection.remote_address());
-
-                while let Ok((send, receive)) = connection.accept_bi().await {
-                    tokio::spawn(async move {
-                        if let Err(e) = handle_stream(send, receive).await {
-                            tracing::error!("Stream handling failed: {:?}", e);
-                        }
-                    });
-                }
-            }
+            info!(
+                "Accepted [{}]'s connection request, they passed authorization",
+                connection.remote_address(),
+            );
         });
     }
 

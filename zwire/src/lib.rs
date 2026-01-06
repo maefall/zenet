@@ -1,6 +1,7 @@
 pub mod codec;
 pub mod errors;
 pub mod helpers;
+pub mod session;
 
 pub use codec::{
     bytes::{Bytes, BytesMut},
@@ -10,8 +11,12 @@ use errors::WireError;
 
 pub mod __zwire_macros_support {
     pub use crate::{
-        codec::wired::{WiredField, WiredFixedBytes, WiredInt, WiredLengthPrefixed, WiredString, WiredStringPolicyKind},
-        errors::WireError, Message,
+        codec::wired::{
+            WiredField, WiredFixedBytes, WiredInt, WiredLengthPrefixed, WiredString,
+            WiredStringPolicyKind,
+        },
+        errors::WireError,
+        Message,
     };
     pub use tokio_util::bytes::Bytes;
 }
@@ -19,10 +24,25 @@ pub mod __zwire_macros_support {
 #[derive(Debug, Clone)]
 pub struct Message(pub u8);
 
+impl Message {
+    pub fn empty() -> Self {
+        Self(0)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Frame {
     pub message: Message,
     pub payload: Bytes,
+}
+
+impl Frame {
+    pub fn message_only(message: impl Into<Message>) -> Self {
+        Self {
+            message: message.into(),
+            payload: BytesMut::new().freeze(),
+        }
+    }
 }
 
 pub trait EncodeIntoFrame: Encoder<Self::EncodeItem> {

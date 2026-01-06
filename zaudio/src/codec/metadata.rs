@@ -21,7 +21,7 @@ pub struct AudioMetadataCodec {}
 define_fields! {
     (Encoding, u8, fixed),
     (Channels, u8, fixed),
-    (sample_rate, u32, fixed),
+    (SampleRate, u32, fixed),
 }
 
 impl Encoder<AudioMetadata> for AudioMetadataCodec {
@@ -34,7 +34,7 @@ impl Encoder<AudioMetadata> for AudioMetadataCodec {
     ) -> Result<(), Self::Error> {
         destination.put_single::<fields::encoding::Wired>(audio_metadata.encoding as u8);
         destination.put_single::<fields::channels::Wired>(audio_metadata.channels as u8);
-        destination.put_single::<fields::sample_rate::Wired>(audio_metadata.sample_rate);
+        destination.put_single::<fields::samplerate::Wired>(audio_metadata.sample_rate);
 
         Ok(())
     }
@@ -61,7 +61,7 @@ impl Decoder for AudioMetadataCodec {
 
         let encoding_code = source.take_single_unchecked::<fields::encoding::Wired>();
         let channels_code = source.take_single_unchecked::<fields::channels::Wired>();
-        let sample_rate = source.take_single_unchecked::<fields::sample_rate::Wired>();
+        let sample_rate = source.take_single_unchecked::<fields::samplerate::Wired>();
 
         Ok(Some(AudioMetadata {
             encoding: AudioEncoding::try_from(encoding_code)?,

@@ -9,6 +9,8 @@ pub mod __zwire_macros_support {
 
 type AudioPayload = Bytes;
 
+// TODO: Make define_message more universal since we used it here to define types for encoding and
+// channels
 define_message!(AudioEncoding, { PcmS16Le = 1 });
 
 define_message!(
@@ -19,9 +21,17 @@ define_message!(
     }
 );
 
+define_message!(
+    ZaudioMessage,
+    { 
+        RequestTransmission = 1,
+        ApproveTransmission = 2, // server opens uni 
+    }
+);
+
 #[derive(Debug, Clone)]
 pub struct AudioMetadata {
-    encoding: AudioEncoding,
-    channels: Channels,
-    sample_rate: u32,
+    pub encoding: AudioEncoding,
+    pub channels: Channels,
+    pub sample_rate: u32,
 }

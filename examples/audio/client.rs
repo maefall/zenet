@@ -1,20 +1,13 @@
 use super::{
-    auth_payload_codec, certificate::load_or_generate_dev_certs, frame_codec, CLIENT_IDENTIFIER,
-    KEY, SERVER_ADDRESS,
+    certificate::load_or_generate_dev_certs, frame_codec, CLIENT_IDENTIFIER, KEY, SERVER_ADDRESS,
 };
 use futures::TryStreamExt;
 use quinn::{ClientConfig, Endpoint};
 use std::error::Error;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::io::AsyncWriteExt;
-use tokio::time::{sleep, Duration};
-use tokio_util::{
-    bytes::BytesMut,
-    codec::{Encoder, FramedRead},
-};
+use tokio_util::{bytes::BytesMut, codec::FramedRead};
 use tracing::info;
-use zauth::AuthMessage;
-use zenet::{zauth::AuthPayload, zwire::EncodeIntoFrame};
+use zenet::zauth::helpers::handle_auth;
 
 const CLIENT_ADDRESS: &str = "127.0.0.1:0";
 
@@ -41,30 +34,25 @@ async fn run_client(
 
     info!("Connected to [{}] server", server_address);
 
-    let (mut send, recv) = connection.open_bi().await?;
-
-    tokio::spawn(async move {
-        let mut framed_reader = FramedRead::new(recv, frame_codec());
-
-        while let Ok(Some(frame)) = framed_reader.try_next().await {
-            info!("{:?}", AuthMessage::try_from(&frame.message).unwrap());
-        }
-    });
-
+    let (mut send, recv) = connection.accept_bi().await?;
     let mut codec_buffer = BytesMut::new();
 
-    loop {
-        let auth_payload = AuthPayload::new(CLIENT_IDENTIFIER.into(), KEY).unwrap();
-        let frame = auth_payload_codec().encode_into_frame(
-            auth_payload,
-            AuthMessage::Auth,
+    let mut framed_reader = FramedRead::new(recv, frame_codec());
+
+    while let Ok(Some(frame)) = framed_reader.try_next().await {
+        let auth_status = handle_auth(
             &mut codec_buffer,
-        )?;
+            &frame.message,
+            &mut send,
+            CLIENT_IDENTIFIER.into(),
+            KEY,
+        )
+        .await;
 
-        frame_codec().encode(frame, &mut codec_buffer).unwrap();
-
-        send.write_all_buf(&mut codec_buffer).await.unwrap();
-
-        sleep(Duration::from_secs(1)).await;
+        if !auth_status {
+            continue;
+        }
     }
+
+    Ok(())
 }

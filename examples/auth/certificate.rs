@@ -1,13 +1,12 @@
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::RootCertStore;
-use std::error::Error;
 use std::{fs, path::Path};
 
 const CERT_PATH: &str = ".cert.der";
 const KEY_PATH: &str = ".key.der";
 
 pub fn load_or_generate_dev_certs<'a>(
-) -> Result<(rustls::RootCertStore, CertificateDer<'a>, PrivateKeyDer<'a>), Box<dyn Error>> {
+) -> anyhow::Result<(rustls::RootCertStore, CertificateDer<'a>, PrivateKeyDer<'a>)> {
     let cert_exists = Path::new(CERT_PATH).exists();
     let key_exists = Path::new(KEY_PATH).exists();
 

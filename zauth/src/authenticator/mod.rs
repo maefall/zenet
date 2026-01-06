@@ -1,6 +1,6 @@
 mod mac;
 
-use crate::{storage::AuthStore, AuthPayload, AuthMessage};
+use crate::{storage::AuthStore, AuthMessage, AuthPayload};
 pub use mac::auth_mac;
 use secrecy::ExposeSecret;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -22,19 +22,25 @@ impl<S: AuthStore> Authenticator<S> {
         }
     }
 
-    pub fn process_auth_payload(&self, auth_payload: &AuthPayload) -> Frame {
+    pub fn process_auth_payload(&self, auth_payload: &AuthPayload) -> (bool, Frame) {
         let auth_status = self.verify_auth(auth_payload);
 
         if auth_status {
-            Frame {
-                message: AuthMessage::AuthValid.into(),
-                payload: Bytes::new(),
-            }
+            (
+                auth_status,
+                Frame {
+                    message: AuthMessage::AuthValid.into(),
+                    payload: Bytes::new(),
+                },
+            )
         } else {
-            Frame {
-                message: AuthMessage::AuthInvalid.into(),
-                payload: Bytes::new(),
-            }
+            (
+                auth_status,
+                Frame {
+                    message: AuthMessage::AuthInvalid.into(),
+                    payload: Bytes::new(),
+                },
+            )
         }
     }
 

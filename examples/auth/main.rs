@@ -6,7 +6,7 @@ mod tracing_setup;
 use client::run as run_client;
 use once_cell::sync::Lazy;
 use server::run as run_server;
-use std::error::Error;
+use std::sync::Arc;
 use tracing_setup::setup_tracing;
 use zenet::{
     zauth::{AuthPayloadCodec, Authenticator, InMemoryStore},
@@ -17,12 +17,12 @@ pub const SERVER_ADDRESS: &str = "127.0.0.1:5000";
 pub const CLIENT_IDENTIFIER: &str = "Zeltra-9";
 pub const KEY: &str = "";
 
-pub static AUTHENTICATOR: Lazy<Authenticator<InMemoryStore>> = Lazy::new(|| {
+pub static AUTHENTICATOR: Lazy<Arc<Authenticator<InMemoryStore>>> = Lazy::new(|| {
     let auth_store = InMemoryStore::new(100);
 
     auth_store.insert_key(CLIENT_IDENTIFIER, KEY.into());
 
-    Authenticator::new(auth_store, 300)
+    Arc::new(Authenticator::new(auth_store, 300))
 });
 
 static FRAME_CODEC: Lazy<FrameCodec> = Lazy::new(FrameCodec::default);
@@ -37,7 +37,7 @@ pub fn auth_payload_codec() -> AuthPayloadCodec {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> anyhow::Result<()> {
     setup_tracing();
 
     let args: Vec<String> = std::env::args().collect();
