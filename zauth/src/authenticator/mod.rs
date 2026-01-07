@@ -1,11 +1,11 @@
 mod mac;
 
-use crate::{storage::AuthStore, AuthPayload};
+use crate::{storage::AuthStore, AuthMessage, AuthPayload};
 pub use mac::auth_mac;
 use secrecy::ExposeSecret;
 use std::time::{SystemTime, UNIX_EPOCH};
 use subtle::ConstantTimeEq;
-use zwire::{codec::bytes::Bytes, Frame, Message};
+use zwire::{codec::bytes::Bytes, Frame};
 
 const DUMMY_KEY: [u8; 32] = [0u8; 32];
 
@@ -22,19 +22,25 @@ impl<S: AuthStore> Authenticator<S> {
         }
     }
 
-    pub fn process_auth_payload(&self, auth_payload: &AuthPayload) -> Frame {
+    pub fn process_auth_payload(&self, auth_payload: &AuthPayload) -> (bool, Frame) {
         let auth_status = self.verify_auth(auth_payload);
 
         if auth_status {
-            Frame {
-                message: Message::AuthValid,
-                payload: Bytes::new(),
-            }
+            (
+                auth_status,
+                Frame {
+                    message: AuthMessage::AuthValid.into(),
+                    payload: Bytes::new(),
+                },
+            )
         } else {
-            Frame {
-                message: Message::AuthInvalid,
-                payload: Bytes::new(),
-            }
+            (
+                auth_status,
+                Frame {
+                    message: AuthMessage::AuthInvalid.into(),
+                    payload: Bytes::new(),
+                },
+            )
         }
     }
 

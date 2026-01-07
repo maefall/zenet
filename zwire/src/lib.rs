@@ -1,6 +1,7 @@
 pub mod codec;
 pub mod errors;
 pub mod helpers;
+pub mod session;
 
 pub use codec::{
     bytes::{Bytes, BytesMut},
@@ -10,10 +11,23 @@ use errors::WireError;
 
 pub mod __zwire_macros_support {
     pub use crate::{
-        codec::wired::{WiredField, WiredFixedBytes, WiredInt, WiredLengthPrefixed, WiredString, WiredStringPolicyKind},
+        codec::wired::{
+            WiredField, WiredFixedBytes, WiredInt, WiredLengthPrefixed, WiredString,
+            WiredStringPolicyKind,
+        },
         errors::WireError,
+        Message,
     };
     pub use tokio_util::bytes::Bytes;
+}
+
+#[derive(Debug, Clone)]
+pub struct Message(pub u8);
+
+impl Message {
+    pub fn empty() -> Self {
+        Self(0)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -22,30 +36,12 @@ pub struct Frame {
     pub payload: Bytes,
 }
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy)]
-pub enum Message {
-    Auth = 1,
-    AuthValid = 2,
-    AuthInvalid = 3,
-}
-
-impl TryFrom<u8> for Message {
-    type Error = WireError;
-
-    fn try_from(code: u8) -> Result<Self, Self::Error> {
-        match code {
-            1 => Ok(Self::Auth),
-            2 => Ok(Self::AuthValid),
-            3 => Ok(Self::AuthInvalid),
-            _ => Err(WireError::InvalidMessageType(code)),
+impl Frame {
+    pub fn message_only(message: impl Into<Message>) -> Self {
+        Self {
+            message: message.into(),
+            payload: BytesMut::new().freeze(),
         }
-    }
-}
-
-impl From<Message> for u8 {
-    fn from(message: Message) -> Self {
-        message as u8
     }
 }
 
@@ -55,7 +51,7 @@ pub trait EncodeIntoFrame: Encoder<Self::EncodeItem> {
     fn encode_into_frame(
         &mut self,
         payload: Self::EncodeItem,
-        message: Message,
+        message: impl Into<Message>,
         codec_buffer: &mut BytesMut,
     ) -> Result<Frame, Self::Error> {
         let start_offset = codec_buffer.len();
@@ -65,7 +61,7 @@ pub trait EncodeIntoFrame: Encoder<Self::EncodeItem> {
         let payload_bytes = codec_buffer.split_off(start_offset);
 
         Ok(Frame {
-            message,
+            message: message.into(),
             payload: payload_bytes.freeze(),
         })
     }

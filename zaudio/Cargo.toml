@@ -1,0 +1,10 @@
+[package]
+name = "zaudio"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+zwire = { path = "../zwire" }
+tracing = { workspace = true }
+miette = { workspace = true }
+thiserror = { workspace = true }

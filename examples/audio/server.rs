@@ -6,16 +6,11 @@ use zauth::integration::AcceptAuthed;
 use zwire::session::{SessionManager, SimpleSessionBackend};
 
 /*
-CLIENT CONNECTS TO SERVER:
-Server -> Client (bi): AuthRequired/AuthValid
+CLIENT CONNECTS TO SERVER & PASSES AUTH:
+Client -> Server (bi): RequestAudioTransmission { optional parameters }
+Server -> Client (bi): AwaitAudioTransmission { audio_metadata, uni stream stable_id }
 
-IF AUTH REQUIRED:
-Client -> Server (bi): Auth { auth payload }
-Server -> Client (bi): AuthValid/AuthInvalid
-
-IF AUTH VALID:
-Auth stream (bi) closed by both parties
-Server acknowledges that client is authorized
+Server -> Client (uni): AudioPayload...
 */
 
 pub async fn run() -> anyhow::Result<()> {

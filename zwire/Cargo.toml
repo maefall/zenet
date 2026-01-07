@@ -10,3 +10,4 @@ thiserror = { workspace = true }
 tokio-util = { workspace = true }
 zenet-macros = { path = "../zenet-macros" }
 bytestr = "0.3.1"
+dashmap = { version = "6.1.0", optional = true }

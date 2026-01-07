@@ -27,6 +27,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.100"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
+
+[[package]]
 name = "aws-lc-rs"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1829,17 +1835,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "zaudio"
+version = "0.0.0"
+dependencies = [
+ "miette",
+ "thiserror 2.0.17",
+ "tracing",
+ "zwire",
+]
+
+[[package]]
 name = "zauth"
 version = "0.0.0"
 dependencies = [
  "dashmap",
+ "futures",
  "hmac",
  "miette",
+ "quinn",
  "rand",
  "secrecy",
  "sha2",
  "subtle",
  "thiserror 2.0.17",
+ "tokio",
+ "tokio-util",
  "tracing",
  "zwire",
 ]
@@ -1848,6 +1868,7 @@ dependencies = [
 name = "zenet"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "futures",
  "once_cell",
  "quinn",
@@ -1857,6 +1878,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "zaudio",
  "zauth",
  "zwire",
 ]
@@ -1901,6 +1923,7 @@ name = "zwire"
 version = "0.0.0"
 dependencies = [
  "bytestr",
+ "dashmap",
  "miette",
  "thiserror 2.0.17",
  "tokio-util",

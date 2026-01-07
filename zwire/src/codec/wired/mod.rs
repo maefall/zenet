@@ -9,7 +9,7 @@ pub use self::{
     length_prefixed::WiredLengthPrefixed,
     string::{WiredString, WiredStringPolicyKind},
 };
-pub use zenet_macros::define_fields;
+pub use zenet_macros::{define_fields, define_message};
 
 pub trait WiredField {
     const FIELD_NAME: &'static str;
