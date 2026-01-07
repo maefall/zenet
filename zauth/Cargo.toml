@@ -18,10 +18,9 @@ tokio = { workspace = true, optional = true }
 tokio-util = { workspace = true, optional = true }
 quinn = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
-anyhow = "1.0" # Delete
 
 [features]
-default = [ "in_memory", "quinn" ]
+default = [ "in_memory", "quinn_integration" ]
 in_memory = [ "dep:dashmap" ]
-integration = [ "dep:tokio", "dep:tokio-util" ]
-quinn = [ "dep:quinn", "dep:futures", "integration" ]
+integration = [ "dep:tokio", "dep:tokio-util", "dep:futures" ]
+quinn_integration = [ "dep:quinn", "integration" ]

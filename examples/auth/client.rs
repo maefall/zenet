@@ -1,7 +1,7 @@
 use super::{certificate::load_or_generate_dev_certs, CLIENT_IDENTIFIER, KEY, SERVER_ADDRESS};
 use quinn::{ClientConfig, Endpoint};
 use std::{net::SocketAddr, sync::Arc};
-use tracing::info;
+use tracing::{error, info};
 use zenet::zauth::integration::ConnectAuthed;
 
 const CLIENT_ADDRESS: &str = "127.0.0.1:0";
@@ -20,7 +20,7 @@ async fn run_client(client_address: SocketAddr, client_config: ClientConfig) -> 
 
     let server_address: SocketAddr = SERVER_ADDRESS.parse()?;
 
-    let Some(Ok(connection)) = endpoint
+    let Ok(Some(connection)) = endpoint
         .connect_with_authed(
             client_config,
             server_address,
@@ -30,6 +30,8 @@ async fn run_client(client_address: SocketAddr, client_config: ClientConfig) -> 
         )
         .await
     else {
+        error!("Failed authorization");
+
         return Ok(());
     };
 

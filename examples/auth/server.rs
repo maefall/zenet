@@ -1,13 +1,12 @@
 use super::{certificate::load_or_generate_dev_certs, AUTHENTICATOR, SERVER_ADDRESS};
 use quinn::{Endpoint, ServerConfig};
-use std::net::SocketAddr;
-use std::sync::Arc;
-
+use std::{net::SocketAddr, sync::Arc};
 use tracing::info;
 use zauth::integration::AcceptAuthed;
+use zwire::session::{SessionManager, SimpleSessionBackend};
 
 /*
-CLIENT INITIATES:
+CLIENT CONNECTS TO SERVER:
 Server -> Client (bi): AuthRequired/AuthValid
 
 IF AUTH REQUIRED:
@@ -15,13 +14,9 @@ Client -> Server (bi): Auth { auth payload }
 Server -> Client (bi): AuthValid/AuthInvalid
 
 IF AUTH VALID:
-Client -> Server (bi): RequestAudioTransmission { optional parameters }
-Server -> Client (bi): AwaitAudioTransmission { audio_metadata, uni stream stable_id }
-
-Server -> Client (uni): AudioPayload...
+Auth stream (bi) closed by both parties
+Server acknowledges that client is authorized
 */
-
-use zwire::session::{SessionManager, SimpleSessionBackend};
 
 pub async fn run() -> anyhow::Result<()> {
     let (_, cert_der, key_der) = load_or_generate_dev_certs()?;
@@ -38,7 +33,7 @@ async fn run_server(server_address: SocketAddr, server_config: ServerConfig) -> 
 
     info!("Server listening on {}", server_address);
 
-    while let Some(Ok(connection)) = endpoint
+    while let Ok(Some(connection)) = endpoint
         .accept_authed(session_manager.clone(), AUTHENTICATOR.clone())
         .await
     {

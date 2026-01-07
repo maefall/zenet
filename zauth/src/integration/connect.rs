@@ -1,12 +1,15 @@
 use crate::{codec::AuthPayloadCodec, AuthMessage, AuthPayload};
+use futures::TryStreamExt;
 use std::net::SocketAddr;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
-use tokio::time::{sleep, Duration};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use tokio::time::{sleep, timeout, Duration};
 use tokio_util::codec::{Encoder, FramedRead};
-use tracing::info;
-use zwire::{codec::bytes::ByteStr, codec::FrameCodec, BytesMut, EncodeIntoFrame, Message};
+use tracing::{error, warn};
+use zwire::{
+    codec::bytes::ByteStr, codec::FrameCodec, errors::WireError, BytesMut, EncodeIntoFrame, Frame,
+};
 
-async fn send_auth<S: AsyncWrite + std::marker::Unpin>(
+async fn send_auth_frame<S: AsyncWrite + std::marker::Unpin>(
     codec_buffer: &mut BytesMut,
     send: &mut S,
     client_identifier: ByteStr,
@@ -24,126 +27,135 @@ async fn send_auth<S: AsyncWrite + std::marker::Unpin>(
     codec_buffer.clear();
 }
 
-async fn perform_auth<S: AsyncWrite + std::marker::Unpin>(
-    codec_buffer: &mut BytesMut,
-    frame_message: &Message,
-    send: &mut S,
-    client_identifier: ByteStr,
-    key: &str,
-    frame_codec: &mut FrameCodec,
-    auth_payload_codec: &mut AuthPayloadCodec,
-) -> bool {
-    if let Ok(auth_message) = AuthMessage::try_from(frame_message) {
-        match auth_message {
-            AuthMessage::AuthRequired => {
-                info!("Server requires auth, sending auth payload");
-
-                send_auth(
-                    codec_buffer,
-                    send,
-                    client_identifier,
-                    key,
-                    frame_codec,
-                    auth_payload_codec,
-                )
-                .await;
-
-                false
-            }
-            AuthMessage::AuthInvalid => {
-                info!("Server says auth is NOT valid, sending auth payload");
-
-                send_auth(
-                    codec_buffer,
-                    send,
-                    client_identifier,
-                    key,
-                    frame_codec,
-                    auth_payload_codec,
-                )
-                .await;
-
-                false
-            }
-            AuthMessage::AuthValid => {
-                info!("Server says auth is valid we can resume");
-
-                true
-            }
-            unexpected_message => {
-                panic!("Unexpected auth message code: {:#?}", unexpected_message)
-            }
+async fn await_auth_response_frame(
+    framed_reader: &mut FramedRead<impl AsyncRead + Unpin, FrameCodec>,
+    timeout_duration: Duration,
+) -> Result<Option<(AuthMessage, Frame)>, WireError> {
+    let result = timeout(timeout_duration, async {
+        while let Some(frame) = framed_reader.try_next().await? {
+            match AuthMessage::try_from(&frame.message) {
+                Err(_) => continue,
+                Ok(auth_message) => {
+                    return Ok(Some((auth_message, frame)));
+                }
+            };
         }
-    } else {
-        panic!("Not an auth message {:#?}", frame_message);
+
+        Ok::<Option<(AuthMessage, Frame)>, WireError>(None)
+    })
+    .await;
+
+    match result {
+        Ok(Ok(Some(response))) => Ok(Some(response)),
+        Ok(Ok(None)) => {
+            error!("EOF before auth response was received");
+
+            Ok(None)
+        }
+        Ok(Err(error)) => Err(error),
+        Err(_elapsed) => {
+            error!("Hit timeout while waiting for auth response");
+
+            Ok(None)
+        }
     }
 }
 
-#[cfg(feature = "quinn")]
-async fn ensure_auth(
+#[allow(clippy::too_many_arguments)]
+async fn ensure_auth<S: AsyncWrite + std::marker::Unpin, R: AsyncRead + std::marker::Unpin>(
     client_identifier: ByteStr,
     key: &str,
-    connection: &quinn::Connection,
-    max_retries: u16,
-    frame_codec: FrameCodec,
+    max_retries: u64,
+    retry_cooldown: Duration,
+    mut frame_codec: FrameCodec,
     auth_payload_codec: &mut AuthPayloadCodec,
+    send: &mut S,
+    receive: &mut R,
 ) -> Result<bool, quinn::ConnectionError> {
-    use futures::TryStreamExt;
-    use quinn::VarInt;
-
-    let (mut send, recv) = connection.accept_bi().await?;
     let mut codec_buffer = BytesMut::new();
-
-    let mut framed_reader = FramedRead::new(recv, frame_codec);
-    let mut is_first_frame = true;
+    let mut framed_reader = FramedRead::new(receive, frame_codec);
     let mut retries = 0;
 
-    while let Ok(Some(frame)) = framed_reader.try_next().await {
-        let frame_codec = framed_reader.decoder_mut();
+    const FRAME_RECEIVE_TIMEOUT: u64 = 1;
 
-        let auth_status = perform_auth(
+    match await_auth_response_frame(
+        &mut framed_reader,
+        Duration::from_secs(FRAME_RECEIVE_TIMEOUT),
+    )
+    .await
+    {
+        Err(error) => error!("{:#?} | on await_auth_response_frame", error),
+        Ok(response) => {
+            if let Some((auth_message, _frame)) = response {
+                match auth_message {
+                    AuthMessage::Auth => (),
+                    AuthMessage::AuthRequired => (),
+                    AuthMessage::AuthInvalid => (),
+                    AuthMessage::AuthValid => return Ok(true),
+                }
+            } else {
+                // No auth response was sent by server, not authenticated
+                error!("No auth response was sent by server, not authenticated. Maybe endpoint doesn't require Auth? Or something is wrong with the Server.");
+                return Ok(false);
+            }
+        }
+    }
+
+    // Don't count first try as a retry
+    while retries < (max_retries + 1) {
+        send_auth_frame(
             &mut codec_buffer,
-            &frame.message,
-            &mut send,
+            send,
             client_identifier.clone(),
             key,
-            frame_codec,
+            &mut frame_codec,
             auth_payload_codec,
         )
         .await;
 
-        if !auth_status {
-            if !is_first_frame {
-                if retries > max_retries {
+        let auth_status = match await_auth_response_frame(
+            &mut framed_reader,
+            Duration::from_secs(FRAME_RECEIVE_TIMEOUT),
+        )
+        .await
+        {
+            Err(error) => {
+                error!("{:#?} | on await_auth_response_frame", error);
+
+                return Ok(false);
+            }
+            Ok(response) => {
+                if let Some((auth_message, _frame)) = response {
+                    match auth_message {
+                        AuthMessage::Auth => false,
+                        AuthMessage::AuthRequired => false,
+                        AuthMessage::AuthInvalid => false,
+                        AuthMessage::AuthValid => true,
+                    }
+                } else {
+                    // No auth response was sent by server, again
+                    error!("Server isn't sending auth response");
+
                     return Ok(false);
                 }
-
-                info!("Client failed to authorize, retrying?");
-
-                sleep(Duration::from_secs(1)).await;
-
-                retries += 1;
             }
+        };
 
-            is_first_frame = false;
-
-            continue;
-        } else {
-            info!("Server says client is authorized, closing auth stream");
-
-            let mut recv = framed_reader.into_inner();
-
-            let _ = recv.stop(VarInt::from_u32(0));
-            let _ = send.finish();
-
+        if auth_status {
             return Ok(true);
+        } else {
+            retries += 1;
+
+            warn!("Client failed to authorize, retrying");
+
+            sleep(retry_cooldown).await;
         }
     }
 
     Ok(false)
 }
 
-#[cfg(feature = "quinn")]
+#[cfg(feature = "quinn_integration")]
 pub trait ConnectAuthed {
     fn connect_with_authed(
         &self,
@@ -152,11 +164,11 @@ pub trait ConnectAuthed {
         server_name: &str,
         client_identifier: ByteStr,
         key: &str,
-    ) -> impl std::future::Future<Output = Option<Result<quinn::Connection, quinn::ConnectionError>>>
+    ) -> impl std::future::Future<Output = Result<Option<quinn::Connection>, quinn::ConnectionError>>
            + Send;
 }
 
-#[cfg(feature = "quinn")]
+#[cfg(feature = "quinn_integration")]
 impl ConnectAuthed for quinn::Endpoint {
     async fn connect_with_authed(
         &self,
@@ -165,30 +177,38 @@ impl ConnectAuthed for quinn::Endpoint {
         server_name: &str,
         client_identifier: ByteStr,
         key: &str,
-    ) -> Option<Result<quinn::Connection, quinn::ConnectionError>> {
+    ) -> Result<Option<quinn::Connection>, quinn::ConnectionError> {
+        const RETRY_COOLDOWN: u64 = 1;
+        const MAX_RETRIES: u64 = 0;
+
         match self.connect_with(config, address, server_name) {
-            Err(_error) => todo!(),
+            Err(_error) => todo!(), // Well this is a connect error, we needa break up the function
+            // into two like quinn does first returns connect error next connection Error but that
+            // can wait for a bit
             Ok(connecting) => match connecting.await {
-                Err(_error) => todo!(),
+                Err(error) => Err(error),
                 Ok(connection) => {
-                    match ensure_auth(
+                    let (mut send, mut receive) = connection.accept_bi().await?;
+
+                    let auth_status = ensure_auth(
                         client_identifier,
                         key,
-                        &connection,
-                        0,
+                        MAX_RETRIES,
+                        Duration::from_secs(RETRY_COOLDOWN),
                         FrameCodec::default(),
                         &mut AuthPayloadCodec::default(),
+                        &mut send,
+                        &mut receive,
                     )
-                    .await
-                    {
-                        Err(_error) => todo!(),
-                        Ok(auth_status) => {
-                            if auth_status {
-                                Some(Ok(connection))
-                            } else {
-                                None
-                            }
-                        }
+                    .await?;
+
+                    let _ = receive.stop(quinn::VarInt::from_u32(0));
+                    let _ = send.finish();
+
+                    if auth_status {
+                        Ok(Some(connection))
+                    } else {
+                        Ok(None)
                     }
                 }
             },
